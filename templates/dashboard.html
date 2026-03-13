@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+</head>
+<body>
+
+<h1>Admin Dashboard</h1>
+<a href="/logout">Logout</a>
+
+<h2>Voting Status</h2>
+{% if voting_open %}
+    <p>Voting is OPEN</p>
+{% else %}
+    <p>Voting not started</p>
+    <a href="/open_voting">Start Voting</a>
+{% endif %}
+
+<h2>Registered Voters</h2>
+<ul>
+    {% for v in voters %}
+        <li>{{ v.name }} - {{ v.email }}</li>
+    {% endfor %}
+</ul>
+
+<h2>Add Candidate</h2>
+<form action="/add_candidate" method="post">
+    <input name="name" placeholder="Candidate Name" required><br><br>
+    <input name="position" placeholder="Position" required><br><br>
+    <button type="submit">Add Candidate</button>
+</form>
+
+<h2>Registered Candidates</h2>
+<ul>
+    {% for c in candidates %}
+        <li>{{ c.name }} - {{ c.position }}</li>
+    {% endfor %}
+</ul>
+
+</body>
+</html>
