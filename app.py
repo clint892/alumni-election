@@ -89,5 +89,8 @@ def logout():
     session.pop('admin_logged_in', None)
     return redirect(url_for('admin_login'))
 
-if __name__ == '__main__':
-    app.run(debug=True)
+import os
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
