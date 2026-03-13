@@ -1,96 +1,89 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for
 from tinydb import TinyDB, Query
+import os
 
 app = Flask(__name__)
-app.secret_key = "supersecretkey"  # Needed for sessions
 
-# TinyDB setup
-db = TinyDB('db.json')
-voters_table = db.table('voters')
-candidates_table = db.table('candidates')
-votes_table = db.table('votes')
+# TinyDB database
+db = TinyDB("db.json")
+voters_table = db.table("voters")
+candidates_table = db.table("candidates")
 
-# Voting state
+# Voting status
 voting_open = False
 
-# Admin credentials (for simplicity)
+# Admin credentials (hardcoded for now)
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "admin123"
 
-# Helper functions
-def get_voters():
-    return voters_table.all()
 
-def add_voter(name, email):
+@app.route("/")
+def home():
+    return render_template(
+        "home.html",
+        voters=voters_table.all(),
+        voting_open=voting_open,
+        candidates=candidates_table.all()
+    )
+
+
+@app.route("/register", methods=["POST"])
+def register():
+    name = request.form["name"]
+    email = request.form["email"]
+
+    # Prevent duplicate registration
     Voter = Query()
     if not voters_table.search(Voter.email == email):
-        voters_table.insert({'name': name, 'email': email})
+        voters_table.insert({"name": name, "email": email})
 
-def get_candidates():
-    return candidates_table.all()
+    return redirect(url_for("home"))
 
-def add_candidate(name, position):
-    Candidate = Query()
-    if not candidates_table.search((Candidate.name == name) & (Candidate.position == position)):
-        candidates_table.insert({'name': name, 'position': position})
 
-# ------------------ Routes ------------------
-
-@app.route('/')
-def home():
-    return render_template("home.html")  # Only voter registration page
-
-@app.route('/register', methods=['POST'])
-def register():
-    name = request.form['name']
-    email = request.form['email']
-    add_voter(name, email)
-    return redirect(url_for('home'))
-
-@app.route('/admin', methods=['GET', 'POST'])
+@app.route("/admin", methods=["GET", "POST"])
 def admin_login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
         if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-            session['admin_logged_in'] = True
-            return redirect(url_for('dashboard'))
-        else:
-            return "Invalid credentials!"
+            return redirect(url_for("dashboard"))
     return render_template("admin_login.html")
 
-@app.route('/dashboard')
+
+@app.route("/dashboard")
 def dashboard():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
-    voters = get_voters()
-    candidates = get_candidates()
-    return render_template("dashboard.html", voters=voters, candidates=candidates, voting_open=voting_open)
+    return render_template(
+        "dashboard.html",
+        voters=voters_table.all(),
+        candidates=candidates_table.all(),
+        voting_open=voting_open
+    )
 
-@app.route('/add_candidate', methods=['POST'])
-def add_candidate_route():
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
-    name = request.form['name']
-    position = request.form['position']
-    add_candidate(name, position)
-    return redirect(url_for('dashboard'))
 
-@app.route('/open_voting')
+@app.route("/open_voting")
 def open_voting():
     global voting_open
-    if not session.get('admin_logged_in'):
-        return redirect(url_for('admin_login'))
     voting_open = True
-    return redirect(url_for('dashboard'))
+    return redirect(url_for("dashboard"))
 
-@app.route('/logout')
-def logout():
-    session.pop('admin_logged_in', None)
-    return redirect(url_for('admin_login'))
 
-import os
+@app.route("/add_candidate", methods=["POST"])
+def add_candidate():
+    name = request.form["name"]
+    if name:
+        candidates_table.insert({"name": name, "votes": 0})
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/vote", methods=["POST"])
+def vote():
+    candidate_id = int(request.form["candidate_id"])
+    candidate = candidates_table.get(doc_id=candidate_id)
+    if candidate:
+        candidates_table.update({"votes": candidate["votes"] + 1}, doc_ids=[candidate_id])
+    return redirect(url_for("home"))
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 5000))  # Render sets this automatically
     app.run(host="0.0.0.0", port=port)
