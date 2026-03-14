@@ -20,98 +20,50 @@ Voting: {{ 'Open' if voting_open else 'Closed' }}
 <a href="/toggle_voting">Toggle</a>
 </p>
 
-
 <h2>Pending Voter Approvals</h2>
 
 <ul>
-
 {% for v in pending_voters %}
-
 <li>
-
 {{v.name}} - {{v.email}}
-
 <a href="/approve_voter/{{v.doc_id}}">Approve</a>
-
 </li>
-
 {% else %}
-
 <li>No pending voters</li>
-
 {% endfor %}
-
 </ul>
-
 
 <h2>Add Candidate</h2>
 
 <form action="/add_candidate" method="post">
-
 <input name="name" placeholder="Candidate Name" required>
 <input type="text" name="position" placeholder="Candidate Position" required>
-
 <button type="submit">Add Candidate</button>
-
 </form>
-
-<select name="position">
-
-<select name="position">
-<option>Chairperson</option>
-<option>Vice Chairperson</option>
-<option>Secretary</option>
-<option>Treasurer</option>
-</select>
-
-</select>
-
-<button type="submit">Add Candidate</button>
-
-</form>
-
 
 <h2>Candidate Applications</h2>
 
 <ul>
-
 {% for c in pending_candidates %}
-
 <li>
-
 {{c.name}} - {{c.position}}
-
 <a href="/approve_candidate/{{c.doc_id}}">Approve</a>
-
 <a href="/delete_candidate/{{c.doc_id}}">Reject</a>
-
 </li>
-
 {% else %}
-
 <li>No pending candidates</li>
-
 {% endfor %}
-
 </ul>
-
 
 <h2>Approved Candidates</h2>
 
 <ul>
-
 {% for c in candidates %}
-
 <li>
-
 {{c.name}} - {{c.position}} - Votes: {{c.votes}}
-
 <a href="/delete_candidate/{{c.doc_id}}">Remove</a>
-
 </li>
-
 {% endfor %}
-
 </ul>
 
 </body>
