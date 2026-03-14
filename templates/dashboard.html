@@ -2,39 +2,29 @@
 <html>
 <head>
 <title>Admin Dashboard</title>
+<style>
+body {font-family:Arial; background:#e0f7fa; color:#333; padding:20px;}
+button,a {color:#fff; background:#00796b; padding:5px 10px; border-radius:5px; text-decoration:none;}
+button:hover,a:hover {background:#004d40;}
+input {padding:5px; margin:2px;}
+</style>
 </head>
-
 <body>
 
 <h1>Admin Dashboard</h1>
 
 <h2>System Controls</h2>
-
-<p>
-Registration: {{ 'Open' if registration_open else 'Closed' }}
-<a href="/toggle_registration">Toggle</a>
-</p>
-
-<p>
-Voting: {{ 'Open' if voting_open else 'Closed' }}
-<a href="/toggle_voting">Toggle</a>
-</p>
+<p>Registration: {{ 'Open' if registration_open else 'Closed' }} <a href="/toggle_registration">Toggle</a></p>
+<p>Voting: {{ 'Open' if voting_open else 'Closed' }} <a href="/toggle_voting">Toggle</a></p>
 
 <h2>Pending Voter Approvals</h2>
-
 <ul>
 {% for v in pending_voters %}
-<li>
-{{v.name}} - {{v.email}}
-<a href="/approve_voter/{{v.doc_id}}">Approve</a>
-</li>
-{% else %}
-<li>No pending voters</li>
-{% endfor %}
+<li>{{v.name}} - {{v.email}} <a href="/approve_voter/{{v.doc_id}}">Approve</a></li>
+{% else %}<li>No pending voters</li>{% endfor %}
 </ul>
 
 <h2>Add Candidate</h2>
-
 <form action="/add_candidate" method="post">
 <input name="name" placeholder="Candidate Name" required>
 <input type="text" name="position" placeholder="Candidate Position" required>
@@ -42,27 +32,20 @@ Voting: {{ 'Open' if voting_open else 'Closed' }}
 </form>
 
 <h2>Candidate Applications</h2>
-
 <ul>
 {% for c in pending_candidates %}
-<li>
-{{c.name}} - {{c.position}}
-<a href="/approve_candidate/{{c.doc_id}}">Approve</a>
+<li>{{c.name}} - {{c.position}} 
+<a href="/approve_candidate/{{c.doc_id}}">Approve</a> 
 <a href="/delete_candidate/{{c.doc_id}}">Reject</a>
 </li>
-{% else %}
-<li>No pending candidates</li>
-{% endfor %}
+{% else %}<li>No pending candidates</li>{% endfor %}
 </ul>
 
 <h2>Approved Candidates</h2>
-
 <ul>
 {% for c in candidates %}
-<li>
-{{c.name}} - {{c.position}} - Votes: {{c.votes}}
-<a href="/delete_candidate/{{c.doc_id}}">Remove</a>
-</li>
+<li>{{c.name}} - {{c.position}} - Votes: {{c.votes}}
+<a href="/delete_candidate/{{c.doc_id}}">Remove</a></li>
 {% endfor %}
 </ul>
 
