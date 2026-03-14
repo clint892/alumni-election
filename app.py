@@ -295,7 +295,9 @@ def delete_candidate(candidate_id):
     candidates_table.remove(doc_ids=[candidate_id])
 
     return redirect(url_for("dashboard"))
-
+@app.route("/apply_candidate_page")
+def apply_candidate_page():
+    return render_template("apply_candidate.html")
 # -----------------------------
 # VOTE
 # -----------------------------

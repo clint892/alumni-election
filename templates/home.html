@@ -1,22 +1,74 @@
-<h1>Alumni Election</h1>
+<!DOCTYPE html>
+<html>
+<head>
+<title>Alumni Election</title>
+</head>
+
+<body>
+
+<h1>Alumni Election System</h1>
+
 <h2>Voter Registration</h2>
+
 {% if registration_open %}
+
 <form action="/register" method="post">
-    <input name="name" placeholder="Name" required><br>
-    <input name="email" placeholder="Email" required><br>
-    <button type="submit">Register</button>
+
+<input name="name" placeholder="Name" required><br><br>
+
+<input name="email" placeholder="Email" required><br><br>
+
+<button type="submit">Register</button>
+
 </form>
+
 {% else %}
-<p>Registration is closed.</p>
+
+<p>Registration is closed</p>
+
 {% endif %}
 
-<h2>Registered Voters</h2>
-<ul>
-{% for v in voters %}
-<li>{{ v.name }} - {{ v.email }} {% if v.confirmed %}(Confirmed){% else %}(Pending){% endif %}</li>
+
+<h2>Voting</h2>
+
+{% if voting_open %}
+
+<form action="/vote" method="post">
+
+<input name="email" placeholder="Your Email" required><br><br>
+
+<select name="candidate_id">
+
+{% for c in candidates %}
+
+<option value="{{c.doc_id}}">
+{{c.name}} - {{c.position}}
+</option>
+
 {% endfor %}
-</ul>
 
-<h2>Voting Status: {{ 'OPEN' if voting_open else 'CLOSED' }}</h2>
+</select>
 
-<p><a href="/admin">Admin Login</a></p>
+<br><br>
+
+<button type="submit">Vote</button>
+
+</form>
+
+{% else %}
+
+<p>Voting is currently closed</p>
+
+{% endif %}
+
+
+<h2>Apply As Candidate</h2>
+
+<a href="/apply_candidate_page">Apply Here</a>
+
+<br><br>
+
+<a href="/admin">Admin Login</a>
+
+</body>
+</html>

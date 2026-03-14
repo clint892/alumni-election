@@ -1,41 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Admin Dashboard</title>
+</head>
+
+<body>
+
 <h1>Admin Dashboard</h1>
 
-<h2>Controls</h2>
-<p>Registration: {{ 'Open' if registration_open else 'Closed' }} <a href="/toggle_registration">Toggle</a></p>
-<p>Voting: {{ 'Open' if voting_open else 'Closed' }} <a href="/toggle_voting">{{ 'Stop' if voting_open else 'Start' }} Voting</a></p>
+<h2>System Controls</h2>
 
-<h2>Pending Voters</h2>
+<p>
+Registration: {{ 'Open' if registration_open else 'Closed' }}
+<a href="/toggle_registration">Toggle</a>
+</p>
+
+<p>
+Voting: {{ 'Open' if voting_open else 'Closed' }}
+<a href="/toggle_voting">Toggle</a>
+</p>
+
+
+<h2>Pending Voter Approvals</h2>
+
 <ul>
+
 {% for v in pending_voters %}
-<li>{{ v.name }} - {{ v.email }} <a href="/approve_voter/{{ v.doc_id }}">Approve & Send Email</a></li>
+
+<li>
+
+{{v.name}} - {{v.email}}
+
+<a href="/approve_voter/{{v.doc_id}}">Approve</a>
+
+</li>
+
 {% else %}
+
 <li>No pending voters</li>
+
 {% endfor %}
+
 </ul>
 
-<h2>Registered Voters</h2>
-<ul>
-{% for v in voters %}
-<li>{{ v.name }} - {{ v.email }} {% if v.confirmed %}(Confirmed){% endif %}</li>
-{% endfor %}
-</ul>
 
-<h2>Candidates</h2>
-<ul>
-{% for c in candidates %}
-<li>{{ c.name }} - Votes: {{ c.votes }}</li>
-{% endfor %}
-</ul>
+<h2>Add Candidate</h2>
 
-<h3>Add Candidate</h3>
 <form action="/add_candidate" method="post">
+
 <input name="name" placeholder="Candidate Name" required>
-<button type="submit">Add</button>
+
+<select name="position">
+
+<option>Chairperson</option>
+<option>Vice Chairperson</option>
+<option>Secretary</option>
+<option>Treasurer</option>
+
+</select>
+
+<button type="submit">Add Candidate</button>
+
 </form>
 
-<h3>Add Admin</h3>
-<form action="/add_admin" method="post">
-<input name="username" placeholder="Username" required>
-<input name="password" type="password" placeholder="Password" required>
-<button type="submit">Add Admin</button>
-</form>
+
+<h2>Candidate Applications</h2>
+
+<ul>
+
+{% for c in pending_candidates %}
+
+<li>
+
+{{c.name}} - {{c.position}}
+
+<a href="/approve_candidate/{{c.doc_id}}">Approve</a>
+
+<a href="/delete_candidate/{{c.doc_id}}">Reject</a>
+
+</li>
+
+{% else %}
+
+<li>No pending candidates</li>
+
+{% endfor %}
+
+</ul>
+
+
+<h2>Approved Candidates</h2>
+
+<ul>
+
+{% for c in candidates %}
+
+<li>
+
+{{c.name}} - {{c.position}} - Votes: {{c.votes}}
+
+<a href="/delete_candidate/{{c.doc_id}}">Remove</a>
+
+</li>
+
+{% endfor %}
+
+</ul>
+
+</body>
+</html>
