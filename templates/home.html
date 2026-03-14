@@ -2,15 +2,15 @@
 <html>
 <head>
 
-<title>Alumni Election</title>
+<title>Election</title>
 
 <style>
 
 body{
 font-family:Arial;
-background:linear-gradient(to right,#2193b0,#6dd5ed);
-color:white;
+background:linear-gradient(to right,#00c6ff,#0072ff);
 text-align:center;
+color:white;
 padding:40px;
 }
 
@@ -25,12 +25,11 @@ border-radius:10px;
 input,select{
 padding:8px;
 margin:5px;
-width:200px;
 }
 
 button{
 padding:10px;
-background:#ffcc00;
+background:yellow;
 border:none;
 font-weight:bold;
 }
@@ -47,13 +46,13 @@ font-weight:bold;
 
 <h2>Register</h2>
 
-{% if registration_open %}
+{% if registration %}
 
 <form method="post" action="/register">
 
-<input name="name" placeholder="Name" required><br>
+<input name="name" placeholder="Name"><br>
 
-<input name="email" placeholder="Email" required><br>
+<input name="email" placeholder="Email"><br>
 
 <button>Register</button>
 
@@ -72,11 +71,11 @@ Registration Closed
 
 <h2>Vote</h2>
 
-{% if voting_open %}
+{% if voting %}
 
 <form method="post" action="/vote">
 
-<input name="email" placeholder="Your Email" required><br>
+<input name="email" placeholder="Your Email"><br>
 
 <select name="candidate_id">
 
@@ -90,7 +89,9 @@ Registration Closed
 
 {% endfor %}
 
-</select><br>
+</select>
+
+<br>
 
 <button>Vote</button>
 
@@ -106,8 +107,6 @@ Voting Not Started
 
 
 <div class="box">
-
-<h3>Candidate Application</h3>
 
 <a href="/apply_candidate_page">Apply as Candidate</a>
 

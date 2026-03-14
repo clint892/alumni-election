@@ -19,6 +19,17 @@ margin:20px;
 border-radius:10px;
 }
 
+table{
+border-collapse:collapse;
+width:100%;
+}
+
+th,td{
+border:1px solid black;
+padding:8px;
+text-align:center;
+}
+
 </style>
 
 </head>
@@ -29,14 +40,12 @@ border-radius:10px;
 
 <div class="box">
 
-<h2>System Controls</h2>
-
-Registration: {{registration_open}}
+Registration: {{registration}}
 <a href="/toggle_registration">Toggle</a>
 
 <br><br>
 
-Voting: {{voting_open}}
+Voting: {{voting}}
 <a href="/toggle_voting">Toggle</a>
 
 </div>
@@ -67,7 +76,7 @@ No pending voters
 
 <h2>Approved Voters</h2>
 
-{% for v in approved_voters %}
+{% for v in voters %}
 
 {{v.name}} - {{v.email}}<br>
 
@@ -93,6 +102,54 @@ No pending voters
 No pending candidates
 
 {% endfor %}
+
+</div>
+
+
+<div class="box">
+
+<h2>Results</h2>
+
+<table>
+
+<tr>
+
+<th>Name</th>
+<th>Position</th>
+<th>Votes</th>
+<th>Percent</th>
+
+</tr>
+
+{% for c in candidates %}
+
+<tr>
+
+<td>{{c.name}}</td>
+
+<td>{{c.position}}</td>
+
+<td>{{c.votes}}</td>
+
+<td>
+
+{% if total_votes>0 %}
+
+{{ (c.votes/total_votes*100)|round(2) }}%
+
+{% else %}
+
+0%
+
+{% endif %}
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</table>
 
 </div>
 

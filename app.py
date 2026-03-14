@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, session
 from tinydb import TinyDB, Query
 
 app = Flask(__name__)
@@ -10,28 +10,24 @@ voters = db.table("voters")
 pending_voters = db.table("pending_voters")
 candidates = db.table("candidates")
 pending_candidates = db.table("pending_candidates")
-
-settings = db.table("settings")
 admins = db.table("admins")
+settings = db.table("settings")
 
 # default admin
 if not admins.all():
     admins.insert({"username":"admin","password":"admin123"})
 
-# default system settings
+# default settings
 if not settings.all():
-    settings.insert({"registration_open":True,"voting_open":False})
-
+    settings.insert({"registration":True,"voting":False})
 
 def get_settings():
     return settings.all()[0]
-
 
 def update_settings(key,value):
     s=settings.all()[0]
     s[key]=value
     settings.update(s,doc_ids=[1])
-
 
 # ================= HOME =================
 
@@ -42,11 +38,10 @@ def home():
 
     return render_template(
         "home.html",
-        registration_open=s["registration_open"],
-        voting_open=s["voting_open"],
+        registration=s["registration"],
+        voting=s["voting"],
         candidates=candidates.all()
     )
-
 
 # ================= REGISTER =================
 
@@ -55,7 +50,7 @@ def register():
 
     s=get_settings()
 
-    if not s["registration_open"]:
+    if not s["registration"]:
         return "Registration closed"
 
     name=request.form["name"]
@@ -66,15 +61,13 @@ def register():
         "email":email
     })
 
-    return "Registration submitted. Wait for admin approval."
-
+    return "Registration sent for approval"
 
 # ================= APPLY CANDIDATE =================
 
 @app.route("/apply_candidate_page")
 def apply_candidate_page():
     return render_template("apply_candidate.html")
-
 
 @app.route("/apply_candidate",methods=["POST"])
 def apply_candidate():
@@ -90,8 +83,7 @@ def apply_candidate():
         "votes":0
     })
 
-    return "Application sent. Wait for admin approval."
-
+    return "Application submitted"
 
 # ================= VOTE =================
 
@@ -100,7 +92,7 @@ def vote():
 
     s=get_settings()
 
-    if not s["voting_open"]:
+    if not s["voting"]:
         return "Voting not started"
 
     email=request.form["email"]
@@ -109,7 +101,7 @@ def vote():
     voter=voters.search(Query().email==email)
 
     if not voter:
-        return "You are not an approved voter"
+        return "You are not approved to vote"
 
     voter=voter[0]
 
@@ -125,8 +117,7 @@ def vote():
 
     voters.update({"voted":True},Query().email==email)
 
-    return "Vote submitted successfully"
-
+    return "Vote successful"
 
 # ================= ADMIN LOGIN =================
 
@@ -151,7 +142,6 @@ def admin():
 
     return render_template("admin_login.html")
 
-
 # ================= DASHBOARD =================
 
 @app.route("/dashboard")
@@ -162,36 +152,38 @@ def dashboard():
 
     s=get_settings()
 
+    total_votes=sum(c["votes"] for c in candidates.all())
+
     return render_template(
         "dashboard.html",
-        registration_open=s["registration_open"],
-        voting_open=s["voting_open"],
+        registration=s["registration"],
+        voting=s["voting"],
         pending_voters=pending_voters.all(),
-        approved_voters=voters.all(),
+        voters=voters.all(),
         pending_candidates=pending_candidates.all(),
-        candidates=candidates.all()
+        candidates=candidates.all(),
+        total_votes=total_votes
     )
 
-
-# ================= TOGGLE =================
+# ================= TOGGLES =================
 
 @app.route("/toggle_registration")
 def toggle_registration():
 
     s=get_settings()
-    update_settings("registration_open",not s["registration_open"])
+
+    update_settings("registration",not s["registration"])
 
     return redirect("/dashboard")
-
 
 @app.route("/toggle_voting")
 def toggle_voting():
 
     s=get_settings()
-    update_settings("voting_open",not s["voting_open"])
+
+    update_settings("voting",not s["voting"])
 
     return redirect("/dashboard")
-
 
 # ================= APPROVE VOTER =================
 
@@ -210,7 +202,6 @@ def approve_voter(id):
 
     return redirect("/dashboard")
 
-
 # ================= APPROVE CANDIDATE =================
 
 @app.route("/approve_candidate/<int:id>")
@@ -227,7 +218,6 @@ def approve_candidate(id):
     pending_candidates.remove(doc_ids=[id])
 
     return redirect("/dashboard")
-
 
 # ================= RUN =================
 
