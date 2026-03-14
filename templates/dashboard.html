@@ -3,51 +3,53 @@
 <head>
 <title>Admin Dashboard</title>
 <style>
-body {font-family:Arial; background:#e0f7fa; color:#333; padding:20px;}
-button,a {color:#fff; background:#00796b; padding:5px 10px; border-radius:5px; text-decoration:none;}
-button:hover,a:hover {background:#004d40;}
-input {padding:5px; margin:2px;}
+body { background: linear-gradient(to right, #ff5f6d, #ffc371); font-family: Arial, sans-serif; color:#000; }
+table { border-collapse: collapse; margin-bottom: 20px; }
+th, td { border:1px solid #000; padding:5px; }
+button { padding:5px; margin:2px; cursor:pointer; }
 </style>
 </head>
 <body>
 
 <h1>Admin Dashboard</h1>
 
-<h2>System Controls</h2>
-<p>Registration: {{ 'Open' if registration_open else 'Closed' }} <a href="/toggle_registration">Toggle</a></p>
-<p>Voting: {{ 'Open' if voting_open else 'Closed' }} <a href="/toggle_voting">Toggle</a></p>
+<a href="/logout">Logout</a>
 
-<h2>Pending Voter Approvals</h2>
-<ul>
+<h2>Registration Control</h2>
+<p>Registration is: {{ "Open" if registration_open else "Closed" }}</p>
+<a href="/toggle_registration">Toggle Registration</a>
+
+<h2>Voting Control</h2>
+<p>Voting is: {{ "Open" if voting_open else "Closed" }}</p>
+<a href="/toggle_voting">Toggle Voting</a>
+
+<h2>Pending Voters</h2>
 {% for v in pending_voters %}
-<li>{{v.name}} - {{v.email}} <a href="/approve_voter/{{v.doc_id}}">Approve</a></li>
-{% else %}<li>No pending voters</li>{% endfor %}
-</ul>
+<p>{{v.name}} - {{v.email}} 
+<a href="/approve_voter/{{v.id}}">Approve</a> 
+<a href="/reject_voter/{{v.id}}">Reject</a></p>
+{% else %}<p>No pending voters</p>{% endfor %}
 
-<h2>Add Candidate</h2>
-<form action="/add_candidate" method="post">
-<input name="name" placeholder="Candidate Name" required>
-<input type="text" name="position" placeholder="Candidate Position" required>
-<button type="submit">Add Candidate</button>
-</form>
-
-<h2>Candidate Applications</h2>
-<ul>
+<h2>Pending Candidates</h2>
 {% for c in pending_candidates %}
-<li>{{c.name}} - {{c.position}} 
-<a href="/approve_candidate/{{c.doc_id}}">Approve</a> 
-<a href="/delete_candidate/{{c.doc_id}}">Reject</a>
-</li>
-{% else %}<li>No pending candidates</li>{% endfor %}
-</ul>
+<p>{{c.name}} - {{c.position}} 
+<a href="/approve_candidate/{{c.id}}">Approve</a> 
+<a href="/reject_candidate/{{c.id}}">Reject</a></p>
+{% else %}<p>No pending candidates</p>{% endfor %}
 
-<h2>Approved Candidates</h2>
-<ul>
+<h2>All Candidates & Results</h2>
+<table>
+<tr><th>Name</th><th>Position</th><th>Votes</th><th>Percentage</th><th>Action</th></tr>
 {% for c in candidates %}
-<li>{{c.name}} - {{c.position}} - Votes: {{c.votes}}
-<a href="/delete_candidate/{{c.doc_id}}">Remove</a></li>
-{% endfor %}
-</ul>
+<tr>
+<td>{{c.name}}</td>
+<td>{{c.position}}</td>
+<td>{{c.votes}}</td>
+<td>{% if total_votes>0 %}{{ (c.votes/total_votes*100)|round(2) }}%{% else %}0%{% endif %}</td>
+<td><a href="/reject_candidate/{{c.id}}">Remove</a></td>
+</tr>
+{% else %}<tr><td colspan="5">No candidates yet</td></tr>{% endfor %}
+</table>
 
 </body>
 </html>
