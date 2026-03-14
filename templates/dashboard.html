@@ -49,13 +49,20 @@ Voting: {{ 'Open' if voting_open else 'Closed' }}
 <form action="/add_candidate" method="post">
 
 <input name="name" placeholder="Candidate Name" required>
+<input type="text" name="position" placeholder="Candidate Position" required>
+
+<button type="submit">Add Candidate</button>
+
+</form>
 
 <select name="position">
 
+<select name="position">
 <option>Chairperson</option>
 <option>Vice Chairperson</option>
 <option>Secretary</option>
 <option>Treasurer</option>
+</select>
 
 </select>
 
