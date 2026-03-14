@@ -2,23 +2,15 @@
 <html>
 <head>
 <title>Apply Candidate</title>
-<style>
-body{font-family:Arial;background:linear-gradient(to right,#00c6ff,#0072ff);text-align:center;color:white;padding:40px;}
-.box{background:rgba(0,0,0,0.3);padding:20px;margin:20px auto;width:350px;border-radius:10px;}
-input{padding:8px;margin:5px;}
-button{padding:10px;background:yellow;border:none;font-weight:bold;}
-</style>
+<link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 <h1>Apply as Candidate</h1>
-<div class="box">
-<form method="post" action="/apply_candidate">
-<input name="name" placeholder="Name" required><br>
-<input name="email" placeholder="Email" required><br>
-<input name="position" placeholder="Position" required><br>
-<button>Submit</button>
+<form action="/apply_candidate" method="post">
+<input name="name" placeholder="Your Name" required>
+<input name="email" placeholder="Your Email" required>
+<input name="position" placeholder="Position applying for" required>
+<button type="submit">Apply</button>
 </form>
-</div>
-<a href="/">Back Home</a>
 </body>
 </html>

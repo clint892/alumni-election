@@ -1,157 +1,45 @@
 <!DOCTYPE html>
 <html>
 <head>
-
 <title>Admin Dashboard</title>
-
-<style>
-
-body{
-font-family:Arial;
-background:linear-gradient(to right,#ff9966,#ff5e62);
-padding:40px;
-}
-
-.box{
-background:white;
-padding:20px;
-margin:20px;
-border-radius:10px;
-}
-
-table{
-border-collapse:collapse;
-width:100%;
-}
-
-th,td{
-border:1px solid black;
-padding:8px;
-text-align:center;
-}
-
-</style>
-
+<link rel="stylesheet" href="/static/css/style.css">
 </head>
-
 <body>
-
 <h1>Admin Dashboard</h1>
 
-<div class="box">
-
-Registration: {{registration}}
-<a href="/toggle_registration">Toggle</a>
-
-<br><br>
-
-Voting: {{voting}}
-<a href="/toggle_voting">Toggle</a>
-
-</div>
-
-
-<div class="box">
+<h2>Controls</h2>
+<p>Registration: {{ 'Open' if registration else 'Closed' }} - <a href="/toggle_registration">Toggle</a></p>
+<p>Voting: {{ 'Open' if voting else 'Closed' }} - <a href="/toggle_voting">Toggle</a></p>
 
 <h2>Pending Voters</h2>
-
+<ul>
 {% for v in pending_voters %}
-
-{{v.name}} - {{v.email}}
-
-<a href="/approve_voter/{{v.doc_id}}">Approve</a>
-
-<br>
-
-{% else %}
-
-No pending voters
-
+<li>{{ v.name }} - {{ v.email }} <a href="/approve_voter/{{ v.doc_id }}">Approve</a></li>
 {% endfor %}
+</ul>
 
-</div>
-
-
-<div class="box">
-
-<h2>Approved Voters</h2>
-
+<h2>Registered Voters</h2>
+<ul>
 {% for v in voters %}
-
-{{v.name}} - {{v.email}}<br>
-
+<li>{{ v.name }} - {{ v.email }} - Voted: {{ 'Yes' if v.voted else 'No' }}</li>
 {% endfor %}
+</ul>
 
-</div>
-
-
-<div class="box">
-
-<h2>Candidate Applications</h2>
-
+<h2>Pending Candidates</h2>
+<ul>
 {% for c in pending_candidates %}
-
-{{c.name}} - {{c.position}}
-
-<a href="/approve_candidate/{{c.doc_id}}">Approve</a>
-
-<br>
-
-{% else %}
-
-No pending candidates
-
+<li>{{ c.name }} - {{ c.position }} <a href="/approve_candidate/{{ c.doc_id }}">Approve</a></li>
 {% endfor %}
+</ul>
 
-</div>
-
-
-<div class="box">
-
-<h2>Results</h2>
-
-<table>
-
-<tr>
-
-<th>Name</th>
-<th>Position</th>
-<th>Votes</th>
-<th>Percent</th>
-
-</tr>
-
+<h2>Approved Candidates</h2>
+<ul>
 {% for c in candidates %}
-
-<tr>
-
-<td>{{c.name}}</td>
-
-<td>{{c.position}}</td>
-
-<td>{{c.votes}}</td>
-
-<td>
-
-{% if total_votes>0 %}
-
-{{ (c.votes/total_votes*100)|round(2) }}%
-
-{% else %}
-
-0%
-
-{% endif %}
-
-</td>
-
-</tr>
-
+<li>{{ c.name }} - {{ c.position }} - Votes: {{ c.votes }} - {{ c.percentage }}% 
+<a href="/delete_candidate/{{ c.doc_id }}">Delete</a></li>
 {% endfor %}
+</ul>
 
-</table>
-
-</div>
-
+<h2>Total Votes: {{ total_votes }}</h2>
 </body>
 </html>
