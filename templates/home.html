@@ -1,35 +1,130 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Alumni Election</title>
+<title>Alumni Election System</title>
+
 <style>
-body {
-  background: linear-gradient(to right, #6a11cb, #2575fc);
-  color: #fff;
-  font-family: Arial, sans-serif;
+
+body{
+font-family: Arial;
+background: linear-gradient(to right,#4facfe,#00f2fe);
+color:white;
+text-align:center;
+padding:40px;
 }
-input, button {
-  padding: 8px;
-  margin: 5px;
+
+input,select{
+padding:8px;
+margin:5px;
+width:200px;
 }
-button { cursor: pointer; background: #ffcc00; border: none; color: #000; }
+
+button{
+padding:10px 20px;
+background:#ffcc00;
+border:none;
+cursor:pointer;
+font-weight:bold;
+}
+
+button:hover{
+background:#ffaa00;
+}
+
+.section{
+background:rgba(0,0,0,0.3);
+padding:20px;
+margin:20px auto;
+width:400px;
+border-radius:10px;
+}
+
+a{
+color:yellow;
+font-weight:bold;
+}
+
 </style>
+
 </head>
+
 <body>
 
-<h1>Alumni Election</h1>
+<h1>Alumni Election System</h1>
+
+
+<div class="section">
+
+<h2>Voter Registration</h2>
 
 {% if registration_open %}
-<h2>Register Voter</h2>
+
 <form action="/register" method="post">
-<input name="name" placeholder="Name" required><br>
+
+<input name="name" placeholder="Full Name" required><br>
+
 <input name="email" placeholder="Email" required><br>
+
 <button type="submit">Register</button>
+
 </form>
+
 {% else %}
-<p>Registration is closed</p>
+
+<p>Registration Closed</p>
+
 {% endif %}
-<hr>
-<p><a href="/admin" style="color: #ff0;">Admin Login</a></p>
+
+</div>
+
+
+<div class="section">
+
+<h2>Vote</h2>
+
+{% if voting_open %}
+
+<form action="/vote" method="post">
+
+<input name="email" placeholder="Your Registered Email" required><br>
+
+<select name="candidate_id">
+
+{% for c in candidates %}
+
+<option value="{{c.doc_id}}">
+{{c.name}} - {{c.position}}
+</option>
+
+{% endfor %}
+
+</select><br>
+
+<button type="submit">Submit Vote</button>
+
+</form>
+
+{% else %}
+
+<p>Voting Not Started Yet</p>
+
+{% endif %}
+
+</div>
+
+
+<div class="section">
+
+<h3>Candidate Application</h3>
+
+<a href="/apply_candidate_page">Apply As Candidate</a>
+
+</div>
+
+
+<br>
+
+<a href="/admin">Admin Login</a>
+
 </body>
 </html>
