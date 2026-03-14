@@ -1,20 +1,22 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Alumni Election System</title>
-</head>
-<body>
-
-<h1>Alumni Election System</h1>
-
-<h2>Register Voter</h2>
+<h1>Alumni Election</h1>
+<h2>Voter Registration</h2>
+{% if registration_open %}
 <form action="/register" method="post">
-    <input name="name" placeholder="Name" required><br><br>
-    <input name="email" placeholder="Email" required><br><br>
+    <input name="name" placeholder="Name" required><br>
+    <input name="email" placeholder="Email" required><br>
     <button type="submit">Register</button>
 </form>
+{% else %}
+<p>Registration is closed.</p>
+{% endif %}
 
-<p>Admin? <a href="/admin">Login Here</a></p>
+<h2>Registered Voters</h2>
+<ul>
+{% for v in voters %}
+<li>{{ v.name }} - {{ v.email }} {% if v.confirmed %}(Confirmed){% else %}(Pending){% endif %}</li>
+{% endfor %}
+</ul>
 
-</body>
-</html>
+<h2>Voting Status: {{ 'OPEN' if voting_open else 'CLOSED' }}</h2>
+
+<p><a href="/admin">Admin Login</a></p>

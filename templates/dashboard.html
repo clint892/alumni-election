@@ -1,41 +1,41 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Admin Dashboard</title>
-</head>
-<body>
-
 <h1>Admin Dashboard</h1>
-<a href="/logout">Logout</a>
 
-<h2>Voting Status</h2>
-{% if voting_open %}
-    <p>Voting is OPEN</p>
+<h2>Controls</h2>
+<p>Registration: {{ 'Open' if registration_open else 'Closed' }} <a href="/toggle_registration">Toggle</a></p>
+<p>Voting: {{ 'Open' if voting_open else 'Closed' }} <a href="/toggle_voting">{{ 'Stop' if voting_open else 'Start' }} Voting</a></p>
+
+<h2>Pending Voters</h2>
+<ul>
+{% for v in pending_voters %}
+<li>{{ v.name }} - {{ v.email }} <a href="/approve_voter/{{ v.doc_id }}">Approve & Send Email</a></li>
 {% else %}
-    <p>Voting not started</p>
-    <a href="/open_voting">Start Voting</a>
-{% endif %}
+<li>No pending voters</li>
+{% endfor %}
+</ul>
 
 <h2>Registered Voters</h2>
 <ul>
-    {% for v in voters %}
-        <li>{{ v.name }} - {{ v.email }}</li>
-    {% endfor %}
+{% for v in voters %}
+<li>{{ v.name }} - {{ v.email }} {% if v.confirmed %}(Confirmed){% endif %}</li>
+{% endfor %}
 </ul>
 
-<h2>Add Candidate</h2>
+<h2>Candidates</h2>
+<ul>
+{% for c in candidates %}
+<li>{{ c.name }} - Votes: {{ c.votes }}</li>
+{% endfor %}
+</ul>
+
+<h3>Add Candidate</h3>
 <form action="/add_candidate" method="post">
-    <input name="name" placeholder="Candidate Name" required><br><br>
-    <input name="position" placeholder="Position" required><br><br>
-    <button type="submit">Add Candidate</button>
+<input name="name" placeholder="Candidate Name" required>
+<button type="submit">Add</button>
 </form>
 
-<h2>Registered Candidates</h2>
-<ul>
-    {% for c in candidates %}
-        <li>{{ c.name }} - {{ c.position }}</li>
-    {% endfor %}
-</ul>
-
-</body>
-</html>
+<h3>Add Admin</h3>
+<form action="/add_admin" method="post">
+<input name="username" placeholder="Username" required>
+<input name="password" type="password" placeholder="Password" required>
+<button type="submit">Add Admin</button>
+</form>
