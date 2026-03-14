@@ -1,137 +1,235 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 from tinydb import TinyDB, Query
-import uuid
 
 app = Flask(__name__)
-app.secret_key = "supersecretkey"
+app.secret_key = "secret123"
 
-# TinyDB setup
-db = TinyDB("db.json")
+db = TinyDB("database.json")
+
 voters = db.table("voters")
+pending_voters = db.table("pending_voters")
 candidates = db.table("candidates")
+pending_candidates = db.table("pending_candidates")
+
+settings = db.table("settings")
 admins = db.table("admins")
 
-# Initialize admin if not exists
+# default admin
 if not admins.all():
-    admins.insert({"username": "admin", "password": "admin123"})
+    admins.insert({"username":"admin","password":"admin123"})
 
-# Election states
-election = {"registration_open": True, "voting_open": False}
+# default system settings
+if not settings.all():
+    settings.insert({"registration_open":True,"voting_open":False})
 
-# ---------------- VOTER ROUTES ----------------
+
+def get_settings():
+    return settings.all()[0]
+
+
+def update_settings(key,value):
+    s=settings.all()[0]
+    s[key]=value
+    settings.update(s,doc_ids=[1])
+
+
+# ================= HOME =================
 
 @app.route("/")
 def home():
-    return render_template("home.html", registration_open=election["registration_open"])
 
-@app.route("/register", methods=["POST"])
+    s=get_settings()
+
+    return render_template(
+        "home.html",
+        registration_open=s["registration_open"],
+        voting_open=s["voting_open"],
+        candidates=candidates.all()
+    )
+
+
+# ================= REGISTER =================
+
+@app.route("/register",methods=["POST"])
 def register():
-    name = request.form["name"]
-    email = request.form["email"]
-    # Check if already exists
-    if voters.search(Query().email == email):
-        return "Email already registered! Please use another email."
-    # Add as pending
-    voters.insert({"id": str(uuid.uuid4()), "name": name, "email": email, "approved": False, "voted": False})
-    return "Registration submitted! Wait for admin approval and email confirmation."
 
-# ---------------- ADMIN ROUTES ----------------
+    s=get_settings()
 
-@app.route("/admin", methods=["GET","POST"])
-def admin_login():
-    if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
-        user = admins.search((Query().username==username) & (Query().password==password))
-        if user:
-            session["admin"] = username
-            return redirect(url_for("dashboard"))
+    if not s["registration_open"]:
+        return "Registration closed"
+
+    name=request.form["name"]
+    email=request.form["email"]
+
+    pending_voters.insert({
+        "name":name,
+        "email":email
+    })
+
+    return "Registration submitted. Wait for admin approval."
+
+
+# ================= APPLY CANDIDATE =================
+
+@app.route("/apply_candidate_page")
+def apply_candidate_page():
+    return render_template("apply_candidate.html")
+
+
+@app.route("/apply_candidate",methods=["POST"])
+def apply_candidate():
+
+    name=request.form["name"]
+    email=request.form["email"]
+    position=request.form["position"]
+
+    pending_candidates.insert({
+        "name":name,
+        "email":email,
+        "position":position,
+        "votes":0
+    })
+
+    return "Application sent. Wait for admin approval."
+
+
+# ================= VOTE =================
+
+@app.route("/vote",methods=["POST"])
+def vote():
+
+    s=get_settings()
+
+    if not s["voting_open"]:
+        return "Voting not started"
+
+    email=request.form["email"]
+    candidate_id=int(request.form["candidate_id"])
+
+    voter=voters.search(Query().email==email)
+
+    if not voter:
+        return "You are not an approved voter"
+
+    voter=voter[0]
+
+    if voter.get("voted"):
+        return "You already voted"
+
+    c=candidates.get(doc_id=candidate_id)
+
+    candidates.update(
+        {"votes":c["votes"]+1},
+        doc_ids=[candidate_id]
+    )
+
+    voters.update({"voted":True},Query().email==email)
+
+    return "Vote submitted successfully"
+
+
+# ================= ADMIN LOGIN =================
+
+@app.route("/admin",methods=["GET","POST"])
+def admin():
+
+    if request.method=="POST":
+
+        username=request.form["username"]
+        password=request.form["password"]
+
+        admin=admins.search(
+            (Query().username==username) &
+            (Query().password==password)
+        )
+
+        if admin:
+            session["admin"]=True
+            return redirect("/dashboard")
+
         return "Invalid login"
+
     return render_template("admin_login.html")
+
+
+# ================= DASHBOARD =================
 
 @app.route("/dashboard")
 def dashboard():
-    if "admin" not in session:
-        return redirect(url_for("admin_login"))
-    pending_voters = voters.search(Query().approved == False)
-    approved_voters = voters.search(Query().approved == True)
-    pending_candidates = candidates.search(Query().approved == False)
-    all_candidates = candidates.all()
-    total_votes = sum(c.get("votes",0) for c in all_candidates)
-    return render_template("dashboard.html", 
-                           pending_voters=pending_voters,
-                           approved_voters=approved_voters,
-                           pending_candidates=pending_candidates,
-                           candidates=all_candidates,
-                           registration_open=election["registration_open"],
-                           voting_open=election["voting_open"],
-                           total_votes=total_votes)
 
-# Admin actions
-@app.route("/approve_voter/<voter_id>")
-def approve_voter(voter_id):
-    if "admin" not in session: return redirect(url_for("admin_login"))
-    voters.update({"approved": True}, Query().id == voter_id)
-    return redirect(url_for("dashboard"))
+    if not session.get("admin"):
+        return redirect("/admin")
 
-@app.route("/reject_voter/<voter_id>")
-def reject_voter(voter_id):
-    if "admin" not in session: return redirect(url_for("admin_login"))
-    voters.remove(Query().id == voter_id)
-    return redirect(url_for("dashboard"))
+    s=get_settings()
+
+    return render_template(
+        "dashboard.html",
+        registration_open=s["registration_open"],
+        voting_open=s["voting_open"],
+        pending_voters=pending_voters.all(),
+        approved_voters=voters.all(),
+        pending_candidates=pending_candidates.all(),
+        candidates=candidates.all()
+    )
+
+
+# ================= TOGGLE =================
 
 @app.route("/toggle_registration")
 def toggle_registration():
-    if "admin" not in session: return redirect(url_for("admin_login"))
-    election["registration_open"] = not election["registration_open"]
-    return redirect(url_for("dashboard"))
+
+    s=get_settings()
+    update_settings("registration_open",not s["registration_open"])
+
+    return redirect("/dashboard")
+
 
 @app.route("/toggle_voting")
 def toggle_voting():
-    if "admin" not in session: return redirect(url_for("admin_login"))
-    election["voting_open"] = not election["voting_open"]
-    return redirect(url_for("dashboard"))
 
-@app.route("/approve_candidate/<candidate_id>")
-def approve_candidate(candidate_id):
-    if "admin" not in session: return redirect(url_for("admin_login"))
-    candidates.update({"approved": True}, Query().id == candidate_id)
-    return redirect(url_for("dashboard"))
+    s=get_settings()
+    update_settings("voting_open",not s["voting_open"])
 
-@app.route("/reject_candidate/<candidate_id>")
-def reject_candidate(candidate_id):
-    if "admin" not in session: return redirect(url_for("admin_login"))
-    candidates.remove(Query().id == candidate_id)
-    return redirect(url_for("dashboard"))
+    return redirect("/dashboard")
 
-# ---------------- CANDIDATE ROUTES ----------------
 
-@app.route("/apply_candidate", methods=["POST"])
-def apply_candidate():
-    name = request.form["name"]
-    position = request.form.get("position","")
-    candidates.insert({"id": str(uuid.uuid4()), "name": name, "position": position, "approved": False, "votes":0})
-    return "Candidate application submitted! Wait for admin approval."
+# ================= APPROVE VOTER =================
 
-# ---------------- VOTING ROUTES ----------------
+@app.route("/approve_voter/<int:id>")
+def approve_voter(id):
 
-@app.route("/vote/<candidate_id>/<voter_id>")
-def vote(candidate_id,voter_id):
-    if not election["voting_open"]:
-        return "Voting is closed"
-    voter = voters.get(doc_id=int(voter_id))
-    if voter["voted"]:
-        return "You have already voted"
-    candidates.update({"votes": Query().votes + 1}, Query().id==candidate_id)
-    voters.update({"voted": True}, Query().id==voter_id)
-    return "Vote recorded!"
+    voter=pending_voters.get(doc_id=id)
 
-# ---------------- LOGOUT ----------------
+    voters.insert({
+        "name":voter["name"],
+        "email":voter["email"],
+        "voted":False
+    })
 
-@app.route("/logout")
-def logout():
-    session.pop("admin", None)
-    return redirect(url_for("admin_login"))
+    pending_voters.remove(doc_ids=[id])
 
-if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    return redirect("/dashboard")
+
+
+# ================= APPROVE CANDIDATE =================
+
+@app.route("/approve_candidate/<int:id>")
+def approve_candidate(id):
+
+    c=pending_candidates.get(doc_id=id)
+
+    candidates.insert({
+        "name":c["name"],
+        "position":c["position"],
+        "votes":0
+    })
+
+    pending_candidates.remove(doc_ids=[id])
+
+    return redirect("/dashboard")
+
+
+# ================= RUN =================
+
+if __name__=="__main__":
+    app.run(host="0.0.0.0",port=5000)
