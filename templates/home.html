@@ -1,39 +1,97 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Alumni Election</title>
-<link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body>
-<h1>Alumni Election System</h1>
+<title>Election System</title>
 
-<h2>Register to Vote</h2>
-{% if registration %}
+<style>
+
+body{
+font-family:Arial;
+background:linear-gradient(120deg,#2980b9,#6dd5fa,#ffffff);
+text-align:center;
+padding:30px;
+}
+
+.card{
+background:white;
+padding:20px;
+margin:20px auto;
+width:400px;
+border-radius:10px;
+box-shadow:0 0 10px gray;
+}
+
+button{
+padding:10px 20px;
+background:#27ae60;
+border:none;
+color:white;
+cursor:pointer;
+border-radius:5px;
+}
+
+input{
+padding:10px;
+width:90%;
+margin:5px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>Online Voting System</h1>
+
+<a href="/admin">Admin Login</a>
+
+<div class="card">
+
+<h2>Register Voter</h2>
+
 <form action="/register" method="post">
 <input name="name" placeholder="Name" required>
 <input name="email" placeholder="Email" required>
-<button type="submit">Register</button>
+<button>Register</button>
 </form>
-{% else %}
-<p>Registration is closed</p>
-{% endif %}
 
-<h2>Vote for Candidates</h2>
-{% if voting %}
-<form action="/vote" method="post">
-<input name="email" placeholder="Your Email" required>
-<select name="candidate_id">
-{% for c in candidates %}
-<option value="{{ c.doc_id }}">{{ c.name }} - {{ c.position }}</option>
-{% endfor %}
-</select>
-<button type="submit">Vote</button>
-</form>
-{% else %}
-<p>Voting not started</p>
-{% endif %}
+</div>
+
+<div class="card">
 
 <h2>Apply as Candidate</h2>
-<a href="/apply_candidate_page">Apply Here</a>
+
+<a href="/apply">
+<button>Apply</button>
+</a>
+
+</div>
+
+
+<div class="card">
+
+<h2>Vote</h2>
+
+<form action="/vote" method="post">
+
+<input name="email" placeholder="Your Email">
+
+<select name="candidate_id">
+
+{% for c in candidates %}
+<option value="{{c.doc_id}}">
+{{c.name}} - {{c.position}}
+</option>
+{% endfor %}
+
+</select>
+
+<button>Vote</button>
+
+</form>
+
+</div>
+
 </body>
 </html>

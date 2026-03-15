@@ -1,45 +1,116 @@
 <!DOCTYPE html>
 <html>
+
 <head>
+
 <title>Admin Dashboard</title>
-<link rel="stylesheet" href="/static/css/style.css">
+
+<style>
+
+body{
+font-family:Arial;
+background:linear-gradient(120deg,#43cea2,#185a9d);
+padding:20px;
+color:white;
+}
+
+.section{
+background:white;
+color:black;
+padding:20px;
+margin:20px;
+border-radius:10px;
+}
+
+button{
+padding:6px 12px;
+background:#2ecc71;
+border:none;
+color:white;
+}
+
+</style>
+
 </head>
+
 <body>
+
 <h1>Admin Dashboard</h1>
 
+<a href="/logout">Logout</a>
+
+<div class="section">
+
 <h2>Controls</h2>
-<p>Registration: {{ 'Open' if registration else 'Closed' }} - <a href="/toggle_registration">Toggle</a></p>
-<p>Voting: {{ 'Open' if voting else 'Closed' }} - <a href="/toggle_voting">Toggle</a></p>
+
+<a href="/toggle_registration">
+<button>Toggle Registration</button>
+</a>
+
+<a href="/toggle_voting">
+<button>Toggle Voting</button>
+</a>
+
+</div>
+
+
+<div class="section">
 
 <h2>Pending Voters</h2>
-<ul>
-{% for v in pending_voters %}
-<li>{{ v.name }} - {{ v.email }} <a href="/approve_voter/{{ v.doc_id }}">Approve</a></li>
-{% endfor %}
-</ul>
 
-<h2>Registered Voters</h2>
-<ul>
-{% for v in voters %}
-<li>{{ v.name }} - {{ v.email }} - Voted: {{ 'Yes' if v.voted else 'No' }}</li>
+{% for v in pending_voters %}
+{{v.name}} - {{v.email}}
+
+<a href="/approve_voter/{{v.doc_id}}">
+<button>Approve</button>
+</a>
+
+<br>
 {% endfor %}
-</ul>
+
+</div>
+
+
+<div class="section">
 
 <h2>Pending Candidates</h2>
-<ul>
+
 {% for c in pending_candidates %}
-<li>{{ c.name }} - {{ c.position }} <a href="/approve_candidate/{{ c.doc_id }}">Approve</a></li>
-{% endfor %}
-</ul>
 
-<h2>Approved Candidates</h2>
-<ul>
+{{c.name}} - {{c.position}}
+
+<a href="/approve_candidate/{{c.doc_id}}">
+<button>Approve</button>
+</a>
+
+<br>
+
+{% endfor %}
+
+</div>
+
+
+<div class="section">
+
+<h2>Candidates</h2>
+
 {% for c in candidates %}
-<li>{{ c.name }} - {{ c.position }} - Votes: {{ c.votes }} - {{ c.percentage }}% 
-<a href="/delete_candidate/{{ c.doc_id }}">Delete</a></li>
-{% endfor %}
-</ul>
 
-<h2>Total Votes: {{ total_votes }}</h2>
+{{c.name}} - {{c.position}}
+
+Votes: {{c.votes}}
+
+{{c.percent}} %
+
+<a href="/delete_candidate/{{c.doc_id}}">
+<button>Delete</button>
+</a>
+
+<br>
+
+{% endfor %}
+
+</div>
+
 </body>
 </html>

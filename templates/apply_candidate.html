@@ -1,16 +1,58 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Apply Candidate</title>
-<link rel="stylesheet" href="/static/css/style.css">
+
+<style>
+
+body{
+background:linear-gradient(120deg,#8e44ad,#3498db);
+text-align:center;
+font-family:Arial;
+padding:100px;
+}
+
+.card{
+background:white;
+padding:20px;
+width:350px;
+margin:auto;
+border-radius:10px;
+}
+
+input{
+padding:10px;
+width:90%;
+margin:10px;
+}
+
+button{
+padding:10px;
+background:#27ae60;
+border:none;
+color:white;
+}
+
+</style>
+
 </head>
+
 <body>
-<h1>Apply as Candidate</h1>
+
+<div class="card">
+
+<h2>Candidate Application</h2>
+
 <form action="/apply_candidate" method="post">
-<input name="name" placeholder="Your Name" required>
-<input name="email" placeholder="Your Email" required>
-<input name="position" placeholder="Position applying for" required>
-<button type="submit">Apply</button>
+
+<input name="name" placeholder="Name">
+<input name="email" placeholder="Email">
+<input name="position" placeholder="Position Applying">
+
+<button>Submit</button>
+
 </form>
+
+</div>
+
 </body>
 </html>
