@@ -1,61 +1,58 @@
+import os
 import sqlite3
-from flask import Flask, request, render_template_string, redirect, url_for, session, flash
+from flask import Flask, request, render_template_string, redirect, session
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "supersecretkey"
 
 # --- Database Setup ---
-conn = sqlite3.connect('election.db', check_same_thread=False)
-cursor = conn.cursor()
+DB_FILE = 'election.db'
 
-# Admins table
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS admins (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    password TEXT,
-    role TEXT
-)
-''')
+def init_db():
+    create_new = not os.path.exists(DB_FILE)
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    cursor = conn.cursor()
 
-# Candidates table
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS candidates (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    email TEXT,
-    position TEXT,
-    approved INTEGER DEFAULT 0
-)
-''')
+    # Create tables if they don't exist
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS admins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT,
+            role TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS candidates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT,
+            position TEXT,
+            approved INTEGER DEFAULT 0
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS voters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT,
+            approved INTEGER DEFAULT 0
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS votes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            voter_email TEXT,
+            candidate_id INTEGER,
+            position TEXT
+        )
+    ''')
 
-# Voters table
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS voters (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    email TEXT,
-    approved INTEGER DEFAULT 0
-)
-''')
+    conn.commit()
 
-# Votes table
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS votes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    voter_email TEXT,
-    candidate_id INTEGER,
-    position TEXT
-)
-''')
-
-conn.commit()
-
-# --- Default admins ---
-def create_admins():
-    cursor.execute("SELECT * FROM admins")
-    if cursor.fetchone() is None:
+    # Insert default admins if first run
+    if create_new:
         admins = [
             ('approver', generate_password_hash('approver123'), 'approver'),
             ('viewer', generate_password_hash('viewer123'), 'viewer')
@@ -63,7 +60,9 @@ def create_admins():
         cursor.executemany("INSERT INTO admins (username, password, role) VALUES (?, ?, ?)", admins)
         conn.commit()
 
-create_admins()
+    return conn, cursor
+
+conn, cursor = init_db()
 
 # --- Templates ---
 login_template = '''
@@ -233,6 +232,7 @@ def logout():
     session.pop('role', None)
     return redirect('/')
 
-# --- Run ---
+# --- Run on Railway ---
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
