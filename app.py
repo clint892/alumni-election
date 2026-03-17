@@ -5,18 +5,50 @@ from flask import Flask, request, redirect, session
 app = Flask(__name__)
 app.secret_key = "secret123"
 
+# ---------------- DATABASE ----------------
 conn = sqlite3.connect("election.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# ================= DATABASE =================
-cursor.execute("CREATE TABLE IF NOT EXISTS voters (id INTEGER PRIMARY KEY, name TEXT, email TEXT UNIQUE, approved INTEGER DEFAULT 0)")
-cursor.execute("CREATE TABLE IF NOT EXISTS candidates (name TEXT PRIMARY KEY, position TEXT, approved INTEGER DEFAULT 0)")
-cursor.execute("CREATE TABLE IF NOT EXISTS votes (email TEXT, candidate TEXT, position TEXT)")
-cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+# Voters
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS voters (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    email TEXT UNIQUE,
+    approved INTEGER DEFAULT 0
+)
+""")
+
+# Candidates (NO EMAIL)
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS candidates (
+    name TEXT PRIMARY KEY,
+    position TEXT,
+    approved INTEGER DEFAULT 0
+)
+""")
+
+# Votes
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS votes (
+    email TEXT,
+    candidate TEXT,
+    position TEXT
+)
+""")
+
+# Settings
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+)
+""")
 cursor.execute("INSERT OR IGNORE INTO settings VALUES ('voting','off')")
+cursor.execute("INSERT OR IGNORE INTO settings VALUES ('registration','on')")
 conn.commit()
 
-# ================= HOME =================
+# ---------------- HOME ----------------
 @app.route('/')
 def home():
     return '''
@@ -26,7 +58,7 @@ def home():
     <a href="/admin_login">Admin Login</a>
     '''
 
-# ================= VOTER =================
+# ---------------- VOTER ----------------
 @app.route('/voter_register', methods=['GET','POST'])
 def voter_register():
     msg=""
@@ -48,16 +80,19 @@ def voter_register():
     </form>{msg}
     '''
 
-# ================= CANDIDATE (NO EMAIL) =================
+# ---------------- CANDIDATE (NO EMAIL) ----------------
 @app.route('/candidate_apply', methods=['GET','POST'])
 def candidate_apply():
     msg=""
     if request.method=="POST":
         name=request.form['name']
         position=request.form['position']
-        cursor.execute("INSERT INTO candidates (name,position,approved) VALUES (?,?,0)",(name,position))
-        conn.commit()
-        msg="Wait approval"
+        try:
+            cursor.execute("INSERT INTO candidates (name,position,approved) VALUES (?,?,0)",(name,position))
+            conn.commit()
+            msg="Wait approval"
+        except:
+            msg="Already applied"
     return f'''
     <h2>Candidate Apply</h2>
     <form method="POST">
@@ -67,21 +102,23 @@ def candidate_apply():
     </form>{msg}
     '''
 
-# ================= ADMIN LOGIN =================
+# ---------------- ADMIN LOGIN ----------------
 @app.route('/admin_login', methods=['GET','POST'])
 def admin_login():
     msg=""
     if request.method=="POST":
-        u=request.form['username']
-        p=request.form['password']
+        username=request.form['username']
+        password=request.form['password']
 
-        if u=="approver" and p=="approver123":
-            session['admin']=u
+        # Approver admin
+        if username=="approver" and password=="approver123":
+            session['admin']=username
             session['role']="approver"
             return redirect('/dashboard')
 
-        if u=="viewer" and p=="viewer123":
-            session['admin']=u
+        # Viewer admin
+        if username=="viewer" and password=="viewer123":
+            session['admin']=username
             session['role']="viewer"
             return redirect('/dashboard')
 
@@ -90,13 +127,13 @@ def admin_login():
     return f'''
     <h2>Admin Login</h2>
     <form method="POST">
-    <input name="username"><br>
-    <input name="password" type="password"><br>
+    <input name="username" placeholder="Username"><br>
+    <input name="password" type="password" placeholder="Password"><br>
     <button>Login</button>
     </form>{msg}
     '''
 
-# ================= DASHBOARD =================
+# ---------------- DASHBOARD ----------------
 @app.route('/dashboard')
 def dashboard():
     if 'admin' not in session:
@@ -127,7 +164,7 @@ def dashboard():
     <a href="/logout">Logout</a>
     '''
 
-# ================= APPROVAL =================
+# ---------------- APPROVAL ----------------
 @app.route('/approve_voter/<int:id>')
 def approve_voter(id):
     cursor.execute("UPDATE voters SET approved=1 WHERE id=?",(id,))
@@ -140,7 +177,7 @@ def approve_candidate(name):
     conn.commit()
     return redirect('/dashboard')
 
-# ================= TOGGLE =================
+# ---------------- TOGGLE VOTING ----------------
 @app.route('/toggle_voting')
 def toggle_voting():
     cursor.execute("SELECT value FROM settings WHERE key='voting'")
@@ -150,10 +187,9 @@ def toggle_voting():
     conn.commit()
     return redirect('/dashboard')
 
-# ================= VOTING =================
+# ---------------- VOTING ----------------
 @app.route('/vote/<email>', methods=['GET','POST'])
 def vote(email):
-
     cursor.execute("SELECT approved FROM voters WHERE email=?",(email,))
     v=cursor.fetchone()
     if not v or v[0]==0:
@@ -187,7 +223,7 @@ def vote(email):
 
     return f"<form method='POST'>{form}<button>Vote</button></form>"
 
-# ================= RESULTS =================
+# ---------------- RESULTS ----------------
 @app.route('/results')
 def results():
     if 'admin' not in session:
@@ -208,13 +244,13 @@ def results():
 
     return output
 
-# ================= LOGOUT =================
+# ---------------- LOGOUT ----------------
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect('/')
 
-# ================= RUN =================
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
