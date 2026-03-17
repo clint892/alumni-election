@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from flask import Flask, request, render_template_string, redirect, session
+from flask import Flask, request, render_template_string, redirect, session, flash, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -14,7 +14,7 @@ def init_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Create tables if they don't exist
+    # Admins table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS admins (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,6 +23,7 @@ def init_db():
             role TEXT
         )
     ''')
+    # Candidates table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,6 +33,7 @@ def init_db():
             approved INTEGER DEFAULT 0
         )
     ''')
+    # Voters table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS voters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +42,7 @@ def init_db():
             approved INTEGER DEFAULT 0
         )
     ''')
+    # Votes table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS votes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,10 +51,9 @@ def init_db():
             position TEXT
         )
     ''')
-
     conn.commit()
 
-    # Insert default admins if first run
+    # Default admins
     if create_new:
         admins = [
             ('approver', generate_password_hash('approver123'), 'approver'),
@@ -71,10 +73,9 @@ login_template = '''
 <style>
 body { background: linear-gradient(to right, #74ebd5, #ACB6E5); font-family: Arial; }
 .container { width: 300px; margin: auto; margin-top: 100px; background: white; padding: 20px; border-radius: 10px; }
-input { width: 100%; padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; }
-button { width: 100%; padding: 10px; border-radius: 5px; border: none; background-color: #4CAF50; color: white; }
-</style>
-</head>
+input, button { width: 100%; padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; }
+button { background-color: #4CAF50; color: white; border: none; }
+</style></head>
 <body>
 <div class="container">
 <h2>Admin Login</h2>
@@ -91,8 +92,7 @@ button { width: 100%; padding: 10px; border-radius: 5px; border: none; backgroun
 
 dashboard_template = '''
 <html>
-<head>
-<title>Admin Dashboard</title>
+<head><title>Admin Dashboard</title>
 <style>
 body { background: linear-gradient(to right, #ffecd2, #fcb69f); font-family: Arial; }
 .container { width: 90%; margin: auto; margin-top: 20px; }
@@ -166,7 +166,90 @@ form { display: inline; }
 </html>
 '''
 
-# --- Routes ---
+voter_register_template = '''
+<html>
+<head><title>Voter Registration</title>
+<style>
+body { background: linear-gradient(to right, #fbc2eb, #a6c1ee); font-family: Arial; }
+.container { width: 300px; margin: auto; margin-top: 50px; background: white; padding: 20px; border-radius: 10px; }
+input, button { width: 100%; padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; }
+button { background-color: #2196F3; color: white; border: none; }
+</style>
+</head>
+<body>
+<div class="container">
+<h2>Voter Registration</h2>
+<form method="POST">
+<input type="text" name="name" placeholder="Full Name" required>
+<input type="email" name="email" placeholder="Email" required>
+<button type="submit">Register</button>
+</form>
+<p>{{ message }}</p>
+<a href="/candidate_apply"><button>Apply as Candidate</button></a>
+</div>
+</body>
+</html>
+'''
+
+candidate_apply_template = '''
+<html>
+<head>
+<title>Candidate Application</title>
+<style>
+body { background: linear-gradient(to right, #ffecd2, #fcb69f); font-family: Arial; }
+.container { width: 300px; margin: auto; margin-top: 50px; background: white; padding: 20px; border-radius: 10px; }
+input, button { width: 100%; padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; }
+button { background-color: #FF5722; color: white; border: none; }
+</style>
+</head>
+<body>
+<div class="container">
+<h2>Candidate Application</h2>
+<form method="POST">
+<input type="text" name="name" placeholder="Full Name" required>
+<input type="email" name="email" placeholder="Email" required>
+<button type="submit">Apply</button>
+</form>
+<p>{{ message }}</p>
+<a href="/voter_register"><button>Back to Voter Registration</button></a>
+</div>
+</body>
+</html>
+'''
+
+vote_template = '''
+<html>
+<head>
+<title>Vote</title>
+<style>
+body { background: linear-gradient(to right, #cfd9df, #e2ebf0); font-family: Arial; }
+.container { width: 600px; margin: auto; margin-top: 20px; background: white; padding: 20px; border-radius: 10px; }
+h2 { text-align: center; }
+table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
+th { background-color: #4CAF50; color: white; }
+button { padding: 5px 10px; border-radius: 5px; border: none; background-color: #2196F3; color: white; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="container">
+<h2>Voting</h2>
+<form method="POST">
+{% for pos, candidates in candidates_by_position.items() %}
+<h3>{{ pos }}</h3>
+{% for c in candidates %}
+<input type="radio" name="{{ pos }}" value="{{ c[0] }}" required> {{ c[1] }}<br>
+{% endfor %}
+{% endfor %}
+<button type="submit">Submit Vote</button>
+</form>
+<p>{{ message }}</p>
+</div>
+</body>
+</html>
+'''
+
+# --- Admin Routes ---
 @app.route('/', methods=['GET', 'POST'])
 def login():
     message = ''
@@ -231,6 +314,55 @@ def logout():
     session.pop('admin', None)
     session.pop('role', None)
     return redirect('/')
+
+# --- Voter Routes ---
+@app.route('/voter_register', methods=['GET', 'POST'])
+def voter_register():
+    message = ''
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        cursor.execute("INSERT INTO voters (name, email, approved) VALUES (?, ?, 0)", (name, email))
+        conn.commit()
+        message = "Registration submitted. Wait for admin approval."
+    return render_template_string(voter_register_template, message=message)
+
+@app.route('/candidate_apply', methods=['GET', 'POST'])
+def candidate_apply():
+    message = ''
+    if request.method == 'POST':
+        name = request.form['name']
+        email = request.form['email']
+        cursor.execute("INSERT INTO candidates (name, email, approved) VALUES (?, ?, 0)", (name, email))
+        conn.commit()
+        message = "Candidate application submitted. Wait for admin approval."
+    return render_template_string(candidate_apply_template, message=message)
+
+# --- Voting ---
+@app.route('/vote/<voter_email>', methods=['GET', 'POST'])
+def vote(voter_email):
+    message = ''
+    cursor.execute("SELECT approved FROM voters WHERE email=?", (voter_email,))
+    voter = cursor.fetchone()
+    if not voter or voter[0]==0:
+        return "You are not approved to vote yet."
+    # Get approved candidates
+    cursor.execute("SELECT id, name, position FROM candidates WHERE approved=1")
+    cands = cursor.fetchall()
+    candidates_by_position = {}
+    for c in cands:
+        candidates_by_position.setdefault(c[2], []).append(c)
+    if request.method=='POST':
+        for position in candidates_by_position.keys():
+            candidate_id = request.form.get(position)
+            if candidate_id:
+                # Check if voter already voted for this position
+                cursor.execute("SELECT * FROM votes WHERE voter_email=? AND position=?", (voter_email, position))
+                if cursor.fetchone() is None:
+                    cursor.execute("INSERT INTO votes (voter_email, candidate_id, position) VALUES (?, ?, ?)", (voter_email, candidate_id, position))
+        conn.commit()
+        message = "Your votes have been submitted!"
+    return render_template_string(vote_template, candidates_by_position=candidates_by_position, message=message)
 
 # --- Run on Railway ---
 if __name__ == '__main__':
