@@ -9,7 +9,7 @@ app.secret_key = "supersecretkey"
 conn = sqlite3.connect('election.db', check_same_thread=False)
 cursor = conn.cursor()
 
-# Users table (admin)
+# Admins table
 cursor.execute('''
 CREATE TABLE IF NOT EXISTS admins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS votes (
 
 conn.commit()
 
-# --- Create default admins if not exist ---
+# --- Default admins ---
 def create_admins():
     cursor.execute("SELECT * FROM admins")
     if cursor.fetchone() is None:
@@ -96,8 +96,8 @@ dashboard_template = '''
 <title>Admin Dashboard</title>
 <style>
 body { background: linear-gradient(to right, #ffecd2, #fcb69f); font-family: Arial; }
-.container { width: 80%; margin: auto; margin-top: 20px; }
-h2 { text-align: center; }
+.container { width: 90%; margin: auto; margin-top: 20px; }
+h2, h3 { text-align: center; }
 table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
 th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
 th { background-color: #f08080; color: white; }
@@ -148,7 +148,7 @@ form { display: inline; }
 {% endfor %}
 </table>
 
-<h3>Results (Percentage)</h3>
+<h3>Voting Results (Percentage)</h3>
 <table>
 <tr><th>Candidate</th><th>Position</th><th>Votes</th><th>Percentage</th></tr>
 {% for res in results %}
@@ -189,13 +189,10 @@ def dashboard():
     if 'admin' not in session:
         return redirect('/')
     role = session.get('role')
-    # pending voters
     cursor.execute("SELECT * FROM voters WHERE approved=0")
     voters = cursor.fetchall()
-    # pending candidates
     cursor.execute("SELECT * FROM candidates WHERE approved=0")
     candidates = cursor.fetchall()
-    # results (only for approved candidates)
     cursor.execute("SELECT id, name, position FROM candidates WHERE approved=1")
     cand_list = cursor.fetchall()
     results = []
@@ -236,6 +233,6 @@ def logout():
     session.pop('role', None)
     return redirect('/')
 
-# --- Run App ---
+# --- Run ---
 if __name__ == '__main__':
     app.run(debug=True)
