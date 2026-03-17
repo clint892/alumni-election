@@ -149,7 +149,7 @@ form { display: inline; }
 <td>{{ cand[2] }}</td>
 <td>
 <form method="POST" action="/approve_candidate/{{ cand[0] }}">
-<input type="text" name="position" placeholder="Enter Position" required>
+<input type="text" name="position" placeholder="Enter Position" required value="{{ cand[3] }}">
 <button type="submit">Approve</button>
 </form>
 </td>
@@ -208,6 +208,7 @@ button { background-color: #2196F3; color: white; border: none; }
 </html>
 '''
 
+# --- Candidate Apply Template with typed position ---
 candidate_apply_template = '''
 <html>
 <head>
@@ -225,6 +226,7 @@ button { background-color: #FF5722; color: white; border: none; }
 <form method="POST">
 <input type="text" name="name" placeholder="Full Name" required>
 <input type="email" name="email" placeholder="Email" required>
+<input type="text" name="position" placeholder="Desired Position" required>
 <button type="submit">Apply</button>
 </form>
 <p>{{ message }}</p>
@@ -341,7 +343,6 @@ def logout():
     session.pop('role', None)
     return redirect('/')
 
-# --- Voter Routes ---
 @app.route('/voter_register', methods=['GET', 'POST'])
 def voter_register():
     message = ''
@@ -359,7 +360,9 @@ def candidate_apply():
     if request.method == 'POST':
         name = request.form['name']
         email = request.form['email']
-        cursor.execute("INSERT INTO candidates (name, email, approved) VALUES (?, ?, 0)", (name, email))
+        position = request.form['position']
+        cursor.execute("INSERT INTO candidates (name, email, position, approved) VALUES (?, ?, ?, 0)", 
+                       (name, email, position))
         conn.commit()
         message = "Candidate application submitted. Wait for admin approval."
     return render_template_string(candidate_apply_template, message=message)
@@ -382,7 +385,8 @@ def vote(voter_email):
             if candidate_id:
                 cursor.execute("SELECT * FROM votes WHERE voter_email=? AND position=?", (voter_email, position))
                 if cursor.fetchone() is None:
-                    cursor.execute("INSERT INTO votes (voter_email, candidate_id, position) VALUES (?, ?, ?)", (voter_email, candidate_id, position))
+                    cursor.execute("INSERT INTO votes (voter_email, candidate_id, position) VALUES (?, ?, ?)", 
+                                   (voter_email, candidate_id, position))
         conn.commit()
         message = "Your votes have been submitted!"
     return render_template_string(vote_template, candidates_by_position=candidates_by_position, message=message)
