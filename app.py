@@ -9,7 +9,7 @@ app.secret_key = "secret123"
 conn = sqlite3.connect("election.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Voters
+# Create tables (only if not exists)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS voters (
     id INTEGER PRIMARY KEY,
@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS voters (
 )
 """)
 
-# Candidates (NO EMAIL)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS candidates (
     name TEXT PRIMARY KEY,
@@ -28,7 +27,6 @@ CREATE TABLE IF NOT EXISTS candidates (
 )
 """)
 
-# Votes
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS votes (
     email TEXT,
@@ -36,17 +34,6 @@ CREATE TABLE IF NOT EXISTS votes (
     position TEXT
 )
 """)
-
-# Settings
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT
-)
-""")
-cursor.execute("INSERT OR IGNORE INTO settings VALUES ('voting','off')")
-cursor.execute("INSERT OR IGNORE INTO settings VALUES ('registration','on')")
-conn.commit()
 
 # ---------------- HOME ----------------
 @app.route('/')
@@ -80,7 +67,7 @@ def voter_register():
     </form>{msg}
     '''
 
-# ---------------- CANDIDATE (NO EMAIL) ----------------
+# ---------------- CANDIDATE ----------------
 @app.route('/candidate_apply', methods=['GET','POST'])
 def candidate_apply():
     msg=""
@@ -145,14 +132,21 @@ def dashboard():
     cursor.execute("SELECT * FROM candidates WHERE approved=0")
     candidates=cursor.fetchall()
 
-    cursor.execute("SELECT value FROM settings WHERE key='voting'")
-    voting=cursor.fetchone()[0]
+    # Read voting and registration status from existing table
+    cursor.execute("SELECT voting FROM settings WHERE id=1")
+    voting = cursor.fetchone()[0]
+
+    cursor.execute("SELECT registration FROM settings WHERE id=1")
+    registration = cursor.fetchone()[0]
 
     return f'''
     <h2>Dashboard ({session['role']})</h2>
 
-    <h3>Voting: {voting}</h3>
+    <h3>Voting: {'ON' if voting else 'OFF'}</h3>
     <a href="/toggle_voting">Toggle Voting</a><br><br>
+
+    <h3>Registration: {'ON' if registration else 'OFF'}</h3>
+    <a href="/toggle_registration">Toggle Registration</a><br><br>
 
     <h3>Approve Voters</h3>
     {''.join([f"{v[1]} <a href='/approve_voter/{v[0]}'>Approve</a><br>" for v in voters])}
@@ -180,10 +174,20 @@ def approve_candidate(name):
 # ---------------- TOGGLE VOTING ----------------
 @app.route('/toggle_voting')
 def toggle_voting():
-    cursor.execute("SELECT value FROM settings WHERE key='voting'")
-    v=cursor.fetchone()[0]
-    new="on" if v=="off" else "off"
-    cursor.execute("UPDATE settings SET value=? WHERE key='voting'",(new,))
+    cursor.execute("SELECT voting FROM settings WHERE id=1")
+    v = cursor.fetchone()[0]
+    new = 1 if v==0 else 0
+    cursor.execute("UPDATE settings SET voting=? WHERE id=1",(new,))
+    conn.commit()
+    return redirect('/dashboard')
+
+# ---------------- TOGGLE REGISTRATION ----------------
+@app.route('/toggle_registration')
+def toggle_registration():
+    cursor.execute("SELECT registration FROM settings WHERE id=1")
+    r = cursor.fetchone()[0]
+    new = 1 if r==0 else 0
+    cursor.execute("UPDATE settings SET registration=? WHERE id=1",(new,))
     conn.commit()
     return redirect('/dashboard')
 
@@ -191,12 +195,12 @@ def toggle_voting():
 @app.route('/vote/<email>', methods=['GET','POST'])
 def vote(email):
     cursor.execute("SELECT approved FROM voters WHERE email=?",(email,))
-    v=cursor.fetchone()
+    v = cursor.fetchone()
     if not v or v[0]==0:
         return "Not approved"
 
-    cursor.execute("SELECT value FROM settings WHERE key='voting'")
-    if cursor.fetchone()[0]=="off":
+    cursor.execute("SELECT voting FROM settings WHERE id=1")
+    if cursor.fetchone()[0]==0:
         return "Voting not started"
 
     cursor.execute("SELECT name,position FROM candidates WHERE approved=1")
@@ -209,6 +213,7 @@ def vote(email):
     if request.method=="POST":
         for pos in grouped:
             choice=request.form.get(pos)
+            # Only 1 vote per position
             cursor.execute("SELECT * FROM votes WHERE email=? AND position=?",(email,pos))
             if not cursor.fetchone():
                 cursor.execute("INSERT INTO votes VALUES (?,?,?)",(email,choice,pos))
@@ -236,11 +241,17 @@ def results():
     for pos in positions:
         output+=f"<h3>{pos}</h3>"
         cursor.execute("SELECT name FROM candidates WHERE position=? AND approved=1",(pos,))
+        total_votes=0
+        votes_count={}
         for c in cursor.fetchall():
             name=c[0]
             cursor.execute("SELECT COUNT(*) FROM votes WHERE candidate=?",(name,))
             v=cursor.fetchone()[0]
-            output+=f"{name}: {v}<br>"
+            votes_count[name]=v
+            total_votes+=v
+        for name,v in votes_count.items():
+            percent= (v/total_votes*100) if total_votes>0 else 0
+            output+=f"{name}: {v} votes ({percent:.1f}%)<br>"
 
     return output
 
