@@ -1,280 +1,264 @@
-# app.py
+import os
+from flask import Flask, request, redirect, url_for, render_template_string, session, flash
 import sqlite3
-from flask import Flask, render_template_string, request, redirect, url_for, session, flash
 
 app = Flask(__name__)
-app.secret_key = "secret123"
+app.secret_key = "supersecretkey"
 
-DATABASE = "election.db"
+DB_FILE = "election.db"
 
-# -----------------------
-# Database helper
-# -----------------------
-def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
-
+# Ensure DB exists and tables created
 def init_db():
-    db = get_db()
-    # Voters
-    db.execute("""CREATE TABLE IF NOT EXISTS voters(
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT,
-                    email TEXT UNIQUE,
-                    approved INTEGER DEFAULT 0
-                )""")
-    # Candidates
-    db.execute("""CREATE TABLE IF NOT EXISTS candidates(
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT,
-                    position TEXT,
-                    approved INTEGER DEFAULT 0
-                )""")
-    # Votes
-    db.execute("""CREATE TABLE IF NOT EXISTS votes(
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    voter_email TEXT,
-                    position TEXT,
-                    candidate_id INTEGER
-                )""")
-    # Admins
-    db.execute("""CREATE TABLE IF NOT EXISTS admin(
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE,
-                    password TEXT,
-                    role TEXT
-                )""")
-    # Settings
-    db.execute("""CREATE TABLE IF NOT EXISTS settings(
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    voting INTEGER DEFAULT 0,
-                    registration INTEGER DEFAULT 1
-                )""")
-    # Insert default admins if missing
-    admin_check = db.execute("SELECT * FROM admin").fetchall()
-    if not admin_check:
-        db.execute("INSERT INTO admin(username,password,role) VALUES('approver','approver123','approver')")
-        db.execute("INSERT INTO admin(username,password,role) VALUES('viewer','viewer123','viewer')")
-    # Insert default settings if missing
-    settings_check = db.execute("SELECT * FROM settings").fetchone()
-    if not settings_check:
-        db.execute("INSERT INTO settings(voting,registration) VALUES(0,1)")
-    db.commit()
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    # Users table
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT,
+        role TEXT,
+        email TEXT,
+        approved INTEGER DEFAULT 0
+    )''')
+    # Candidates table
+    c.execute('''CREATE TABLE IF NOT EXISTS candidates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        position TEXT,
+        approved INTEGER DEFAULT 0
+    )''')
+    # Votes table
+    c.execute('''CREATE TABLE IF NOT EXISTS votes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        voter_id INTEGER,
+        candidate_id INTEGER,
+        position TEXT
+    )''')
+    # Positions table
+    c.execute('''CREATE TABLE IF NOT EXISTS positions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT
+    )''')
+    # Election control
+    c.execute('''CREATE TABLE IF NOT EXISTS election_control (
+        id INTEGER PRIMARY KEY,
+        registration_open INTEGER DEFAULT 1,
+        voting_open INTEGER DEFAULT 0
+    )''')
+    # Default election control row
+    c.execute("INSERT OR IGNORE INTO election_control (id, registration_open, voting_open) VALUES (1,1,0)")
+    # Add default admins if not exist
+    c.execute("INSERT OR IGNORE INTO users (username, password, role, email, approved) VALUES ('approver','approver123','approver','approver@example.com',1)")
+    c.execute("INSERT OR IGNORE INTO users (username, password, role, email, approved) VALUES ('viewer','viewer123','viewer','viewer@example.com',1)")
+    conn.commit()
+    conn.close()
 
 init_db()
 
-# -----------------------
-# Templates (embedded)
-# -----------------------
+# Helpers
+def get_db():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-dashboard_template = """
-<!DOCTYPE html>
-<html>
-<head>
-<title>Admin Dashboard</title>
-<style>
-body {font-family: Arial; background: linear-gradient(120deg, #f6d365, #fda085);}
-.container {max-width: 800px; margin:auto; padding:20px; background: rgba(255,255,255,0.8); border-radius: 10px;}
-h2 {text-align:center; color:#333;}
-table {width:100%; border-collapse: collapse;}
-th,td {padding:8px; border:1px solid #ccc;}
-th {background:#f28a30; color:white;}
-a.button {padding:5px 10px; background:#ff5a5f; color:white; text-decoration:none; border-radius:5px;}
-a.button:hover {background:#ff1e1e;}
-</style>
-</head>
-<body>
-<div class="container">
-<h2>Admin Dashboard - {{role}}</h2>
+def is_logged_in():
+    return 'user_id' in session
 
-{% if role=='approver' %}
-<h3>Settings</h3>
-<form method="POST" action="/toggle_voting">
-Voting: <input type="submit" name="toggle" value="{{'Close' if voting else 'Open'}}">
-</form>
-<form method="POST" action="/toggle_registration">
-Registration: <input type="submit" name="toggle" value="{{'Close' if registration else 'Open'}}">
-</form>
+def is_admin():
+    return session.get('role') in ['approver','viewer']
 
-<h3>Pending Voters</h3>
-<table>
-<tr><th>Name</th><th>Email</th><th>Approve</th></tr>
-{% for v in voters %}
-<tr>
-<td>{{v['name']}}</td>
-<td>{{v['email']}}</td>
-<td><a href="/approve_voter/{{v['id']}}" class="button">Approve</a></td>
-</tr>
-{% endfor %}
-</table>
-
-<h3>Pending Candidates</h3>
-<table>
-<tr><th>Name</th><th>Position</th><th>Approve</th><th>Cancel</th></tr>
-{% for c in candidates %}
-<tr>
-<td>{{c['name']}}</td>
-<td>{{c['position']}}</td>
-<td><a href="/approve_candidate/{{c['id']}}" class="button">Approve</a></td>
-<td><a href="/cancel_candidate/{{c['id']}}" class="button">Cancel</a></td>
-</tr>
-{% endfor %}
-</table>
-{% endif %}
-
-{% if role=='viewer' or role=='approver' %}
-<h3>Results (Percentages)</h3>
-<table>
-<tr><th>Position</th><th>Candidate</th><th>Votes</th><th>Percent</th></tr>
-{% for r in results %}
-<tr>
-<td>{{r['position']}}</td>
-<td>{{r['name']}}</td>
-<td>{{r['votes']}}</td>
-<td>{{r['percent']}}%</td>
-</tr>
-{% endfor %}
-</table>
-{% endif %}
-
-</div>
-</body>
-</html>
-"""
-
-login_template = """
-<!DOCTYPE html>
-<html>
-<head>
-<title>Admin Login</title>
-<style>
-body {font-family: Arial; background: linear-gradient(120deg,#cfd9df,#e2ebf0);}
-.container {max-width:400px;margin:auto;padding:20px;background:white;border-radius:10px;margin-top:100px;}
-input[type=text], input[type=password]{width:100%;padding:10px;margin:5px 0;}
-input[type=submit]{padding:10px; background:#4CAF50;color:white;border:none;width:100%;}
-</style>
-</head>
-<body>
-<div class="container">
-<h2>Admin Login</h2>
-<form method="POST">
-<input type="text" name="username" placeholder="Username" required>
-<input type="password" name="password" placeholder="Password" required>
-<input type="submit" value="Login">
-</form>
-{% with messages = get_flashed_messages() %}
-{% if messages %}
-<ul>
-{% for msg in messages %}
-<li>{{msg}}</li>
-{% endfor %}
-</ul>
-{% endif %}
-{% endwith %}
-</div>
-</body>
-</html>
-"""
-
-# -----------------------
-# Helper functions
-# -----------------------
-def get_settings():
-    db = get_db()
-    s = db.execute("SELECT * FROM settings").fetchone()
-    return s['voting'], s['registration']
-
-def get_results():
-    db = get_db()
-    candidates = db.execute("SELECT * FROM candidates WHERE approved=1").fetchall()
-    results=[]
-    for c in candidates:
-        votes = db.execute("SELECT COUNT(*) as cnt FROM votes WHERE candidate_id=?", (c['id'],)).fetchone()['cnt']
-        total_votes = db.execute("SELECT COUNT(*) as total FROM votes WHERE position=?", (c['position'],)).fetchone()['total']
-        percent = round((votes/total_votes*100) if total_votes else 0,2)
-        results.append({'position':c['position'], 'name':c['name'],'votes':votes,'percent':percent})
-    return results
-
-# -----------------------
 # Routes
-# -----------------------
-@app.route("/", methods=['GET','POST'])
+@app.route('/')
+def index():
+    if not is_logged_in():
+        return redirect(url_for('login'))
+    return redirect(url_for('dashboard'))
+
+@app.route('/login', methods=['GET','POST'])
 def login():
     if request.method=='POST':
-        username=request.form['username']
-        password=request.form['password']
-        db=get_db()
-        admin=db.execute("SELECT * FROM admin WHERE username=? AND password=?", (username,password)).fetchone()
-        if admin:
-            session['admin_id']=admin['id']
-            session['role']=admin['role']
+        username = request.form['username']
+        password = request.form['password']
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT * FROM users WHERE username=? AND password=?", (username,password))
+        user = c.fetchone()
+        conn.close()
+        if user:
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            session['role'] = user['role']
+            flash("Logged in successfully","success")
             return redirect(url_for('dashboard'))
         else:
-            flash("Invalid login")
-    return render_template_string(login_template)
+            flash("Invalid login","danger")
+    return render_template_string('''
+    <html><head><title>Login</title>
+    <style>
+    body {background: linear-gradient(to right, #74ebd5, #ACB6E5); font-family: Arial;}
+    .login {width:300px;margin:100px auto;padding:20px;background:white;border-radius:10px;}
+    </style>
+    </head>
+    <body>
+    <div class="login">
+    <h3>Login</h3>
+    <form method="post">
+    Username:<br><input type="text" name="username" required><br>
+    Password:<br><input type="password" name="password" required><br><br>
+    <input type="submit" value="Login">
+    </form>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div style="color:red;">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    </div>
+    </body></html>
+    ''')
 
-@app.route("/dashboard")
+@app.route('/dashboard')
 def dashboard():
-    if 'admin_id' not in session:
-        return redirect(url_for('login'))
-    db=get_db()
-    role=session['role']
-    voters=[]
-    candidates=[]
-    voting, registration = get_settings()
-    if role=='approver':
-        voters=db.execute("SELECT * FROM voters WHERE approved=0").fetchall()
-        candidates=db.execute("SELECT * FROM candidates WHERE approved=0").fetchall()
-    results=get_results()
-    return render_template_string(dashboard_template, voters=voters, candidates=candidates, role=role, results=results, voting=voting, registration=registration)
+    if not is_logged_in(): return redirect(url_for('login'))
+    conn = get_db()
+    c = conn.cursor()
+    # Get election control
+    c.execute("SELECT * FROM election_control WHERE id=1")
+    control = c.fetchone()
+    # Get pending voters
+    c.execute("SELECT * FROM users WHERE approved=0")
+    pending_voters = c.fetchall()
+    # Get pending candidates
+    c.execute("SELECT * FROM candidates WHERE approved=0")
+    pending_candidates = c.fetchall()
+    # All candidates approved
+    c.execute("SELECT * FROM candidates WHERE approved=1")
+    candidates = c.fetchall()
+    # Votes count per position
+    c.execute("SELECT position, COUNT(*) as total FROM votes GROUP BY position")
+    votes_summary = c.fetchall()
+    conn.close()
+    return render_template_string('''
+    <html><head><title>Admin Dashboard</title>
+    <style>
+    body {font-family:Arial; background: linear-gradient(to right, #ffecd2, #fcb69f);}
+    h2 {color:#333;}
+    table {border-collapse: collapse; width:80%; margin-bottom:20px;}
+    table, th, td {border:1px solid #999;}
+    th, td {padding:8px;text-align:left;}
+    .btn {padding:5px 10px; border:none; border-radius:5px; cursor:pointer;}
+    .btn-approve {background:green; color:white;}
+    .btn-cancel {background:red; color:white;}
+    .btn-toggle {background:#007BFF; color:white;}
+    </style>
+    </head>
+    <body>
+    <h2>Welcome, {{ session['username'] }} ({{ session['role'] }})</h2>
+    <h3>Election Controls</h3>
+    <form method="post" action="/toggle_registration">
+      <button class="btn btn-toggle">{{ 'Close' if control['registration_open'] else 'Open' }} Registration</button>
+    </form>
+    <form method="post" action="/toggle_voting">
+      <button class="btn btn-toggle">{{ 'Close' if control['voting_open'] else 'Open' }} Voting</button>
+    </form>
 
-@app.route("/approve_voter/<int:id>")
-def approve_voter(id):
-    db=get_db()
-    db.execute("UPDATE voters SET approved=1 WHERE id=?",(id,))
-    db.commit()
-    return redirect(url_for('dashboard'))
+    <h3>Pending Voters</h3>
+    <table>
+    <tr><th>Username</th><th>Email</th><th>Action</th></tr>
+    {% for voter in pending_voters %}
+    <tr>
+      <td>{{ voter['username'] }}</td>
+      <td>{{ voter['email'] }}</td>
+      <td>
+        <a href="/approve_voter/{{ voter['id'] }}" class="btn btn-approve">Approve</a>
+      </td>
+    </tr>
+    {% endfor %}
+    </table>
 
-@app.route("/approve_candidate/<int:id>")
-def approve_candidate(id):
-    db=get_db()
-    db.execute("UPDATE candidates SET approved=1 WHERE id=?",(id,))
-    db.commit()
-    return redirect(url_for('dashboard'))
+    <h3>Pending Candidates</h3>
+    <table>
+    <tr><th>Name</th><th>Position</th><th>Action</th></tr>
+    {% for cand in pending_candidates %}
+    <tr>
+      <td>{{ cand['name'] }}</td>
+      <td>{{ cand['position'] }}</td>
+      <td>
+        <a href="/approve_candidate/{{ cand['id'] }}" class="btn btn-approve">Approve</a>
+        <a href="/cancel_candidate/{{ cand['id'] }}" class="btn btn-cancel">Cancel</a>
+      </td>
+    </tr>
+    {% endfor %}
+    </table>
 
-@app.route("/cancel_candidate/<int:id>")
-def cancel_candidate(id):
-    db=get_db()
-    db.execute("DELETE FROM candidates WHERE id=?",(id,))
-    db.commit()
-    return redirect(url_for('dashboard'))
+    <h3>Voting Results (Percentages)</h3>
+    <table>
+    <tr><th>Position</th><th>Total Votes</th></tr>
+    {% for v in votes_summary %}
+      <tr><td>{{ v['position'] }}</td><td>{{ v['total'] }}</td></tr>
+    {% endfor %}
+    </table>
 
-@app.route("/toggle_voting", methods=['POST'])
-def toggle_voting():
-    db=get_db()
-    voting, registration = get_settings()
-    new_status=0 if voting else 1
-    db.execute("UPDATE settings SET voting=? WHERE id=1",(new_status,))
-    db.commit()
-    return redirect(url_for('dashboard'))
+    <br><a href="/logout">Logout</a>
+    </body></html>
+    ''', control=control, pending_voters=pending_voters, pending_candidates=pending_candidates, votes_summary=votes_summary)
 
-@app.route("/toggle_registration", methods=['POST'])
+# Admin actions
+@app.route('/toggle_registration', methods=['POST'])
 def toggle_registration():
-    db=get_db()
-    voting, registration = get_settings()
-    new_status=0 if registration else 1
-    db.execute("UPDATE settings SET registration=? WHERE id=1",(new_status,))
-    db.commit()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT registration_open FROM election_control WHERE id=1")
+    status = c.fetchone()['registration_open']
+    new_status = 0 if status else 1
+    c.execute("UPDATE election_control SET registration_open=? WHERE id=1", (new_status,))
+    conn.commit()
+    conn.close()
     return redirect(url_for('dashboard'))
 
-@app.route("/logout")
+@app.route('/toggle_voting', methods=['POST'])
+def toggle_voting():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT voting_open FROM election_control WHERE id=1")
+    status = c.fetchone()['voting_open']
+    new_status = 0 if status else 1
+    c.execute("UPDATE election_control SET voting_open=? WHERE id=1", (new_status,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('dashboard'))
+
+@app.route('/approve_voter/<int:id>')
+def approve_voter(id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("UPDATE users SET approved=1 WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('dashboard'))
+
+@app.route('/approve_candidate/<int:id>')
+def approve_candidate(id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("UPDATE candidates SET approved=1 WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('dashboard'))
+
+@app.route('/cancel_candidate/<int:id>')
+def cancel_candidate(id):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("DELETE FROM candidates WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('dashboard'))
+
+@app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
-# -----------------------
-# Run
-# -----------------------
-if __name__=="__main__":
-    app.run(debug=True)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
