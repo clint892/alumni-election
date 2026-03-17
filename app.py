@@ -67,6 +67,27 @@ def init_db():
 conn, cursor = init_db()
 
 # --- Templates ---
+landing_template = '''
+<html>
+<head>
+<title>Alumni Election System</title>
+<style>
+body { background: linear-gradient(to right, #c6ffdd, #fbd786, #f7797d); font-family: Arial; }
+.container { width: 400px; margin: auto; margin-top: 100px; background: white; padding: 20px; border-radius: 10px; text-align: center; }
+button { padding: 10px 20px; margin: 10px; border-radius: 5px; border: none; cursor: pointer; background-color: #4CAF50; color: white; }
+</style>
+</head>
+<body>
+<div class="container">
+<h2>Welcome to Alumni Election</h2>
+<a href="/voter_register"><button>Register as Voter</button></a><br>
+<a href="/candidate_apply"><button>Apply as Candidate</button></a><br>
+<a href="/admin_login"><button>Admin Login</button></a>
+</div>
+</body>
+</html>
+'''
+
 login_template = '''
 <html>
 <head><title>Admin Login</title>
@@ -85,6 +106,7 @@ button { background-color: #4CAF50; color: white; border: none; }
 <button type="submit">Login</button>
 </form>
 <p>{{ message }}</p>
+<a href="/home"><button>Back to Home</button></a>
 </div>
 </body>
 </html>
@@ -185,7 +207,7 @@ button { background-color: #2196F3; color: white; border: none; }
 <button type="submit">Register</button>
 </form>
 <p>{{ message }}</p>
-<a href="/candidate_apply"><button>Apply as Candidate</button></a>
+<a href="/home"><button>Back to Home</button></a>
 </div>
 </body>
 </html>
@@ -211,7 +233,7 @@ button { background-color: #FF5722; color: white; border: none; }
 <button type="submit">Apply</button>
 </form>
 <p>{{ message }}</p>
-<a href="/voter_register"><button>Back to Voter Registration</button></a>
+<a href="/home"><button>Back to Home</button></a>
 </div>
 </body>
 </html>
@@ -244,13 +266,23 @@ button { padding: 5px 10px; border-radius: 5px; border: none; background-color: 
 <button type="submit">Submit Vote</button>
 </form>
 <p>{{ message }}</p>
+<a href="/home"><button>Back to Home</button></a>
 </div>
 </body>
 </html>
 '''
 
-# --- Admin Routes ---
-@app.route('/', methods=['GET', 'POST'])
+# --- Routes ---
+
+@app.route('/')
+def index_redirect():
+    return redirect('/home')
+
+@app.route('/home')
+def home():
+    return render_template_string(landing_template)
+
+@app.route('/admin_login', methods=['GET', 'POST'])
 def login():
     message = ''
     if request.method == 'POST':
@@ -269,7 +301,7 @@ def login():
 @app.route('/dashboard')
 def dashboard():
     if 'admin' not in session:
-        return redirect('/')
+        return redirect('/admin_login')
     role = session.get('role')
     cursor.execute("SELECT * FROM voters WHERE approved=0")
     voters = cursor.fetchall()
@@ -289,14 +321,14 @@ def dashboard():
 
 @app.route('/approve_voter/<int:voter_id>', methods=['POST'])
 def approve_voter(voter_id):
-    if 'admin' not in session: return redirect('/')
+    if 'admin' not in session: return redirect('/admin_login')
     cursor.execute("UPDATE voters SET approved=1 WHERE id=?", (voter_id,))
     conn.commit()
     return redirect('/dashboard')
 
 @app.route('/approve_candidate/<int:cand_id>', methods=['POST'])
 def approve_candidate(cand_id):
-    if 'admin' not in session: return redirect('/')
+    if 'admin' not in session: return redirect('/admin_login')
     position = request.form['position']
     cursor.execute("UPDATE candidates SET approved=1, position=? WHERE id=?", (position, cand_id))
     conn.commit()
@@ -304,7 +336,7 @@ def approve_candidate(cand_id):
 
 @app.route('/cancel_candidate/<int:cand_id>', methods=['POST'])
 def cancel_candidate(cand_id):
-    if 'admin' not in session: return redirect('/')
+    if 'admin' not in session: return redirect('/admin_login')
     cursor.execute("DELETE FROM candidates WHERE id=?", (cand_id,))
     conn.commit()
     return redirect('/dashboard')
@@ -313,7 +345,7 @@ def cancel_candidate(cand_id):
 def logout():
     session.pop('admin', None)
     session.pop('role', None)
-    return redirect('/')
+    return redirect('/home')
 
 # --- Voter Routes ---
 @app.route('/voter_register', methods=['GET', 'POST'])
@@ -346,7 +378,6 @@ def vote(voter_email):
     voter = cursor.fetchone()
     if not voter or voter[0]==0:
         return "You are not approved to vote yet."
-    # Get approved candidates
     cursor.execute("SELECT id, name, position FROM candidates WHERE approved=1")
     cands = cursor.fetchall()
     candidates_by_position = {}
@@ -356,7 +387,6 @@ def vote(voter_email):
         for position in candidates_by_position.keys():
             candidate_id = request.form.get(position)
             if candidate_id:
-                # Check if voter already voted for this position
                 cursor.execute("SELECT * FROM votes WHERE voter_email=? AND position=?", (voter_email, position))
                 if cursor.fetchone() is None:
                     cursor.execute("INSERT INTO votes (voter_email, candidate_id, position) VALUES (?, ?, ?)", (voter_email, candidate_id, position))
