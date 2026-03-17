@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from flask import Flask, request, render_template_string, redirect, session, flash, url_for
+from flask import Flask, request, render_template_string, redirect, session
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -14,7 +14,6 @@ def init_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     cursor = conn.cursor()
 
-    # Admins table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS admins (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,7 +22,6 @@ def init_db():
             role TEXT
         )
     ''')
-    # Candidates table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +31,6 @@ def init_db():
             approved INTEGER DEFAULT 0
         )
     ''')
-    # Voters table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS voters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +39,6 @@ def init_db():
             approved INTEGER DEFAULT 0
         )
     ''')
-    # Votes table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS votes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +49,6 @@ def init_db():
     ''')
     conn.commit()
 
-    # Default admins
     if create_new:
         admins = [
             ('approver', generate_password_hash('approver123'), 'approver'),
@@ -61,7 +56,6 @@ def init_db():
         ]
         cursor.executemany("INSERT INTO admins (username, password, role) VALUES (?, ?, ?)", admins)
         conn.commit()
-
     return conn, cursor
 
 conn, cursor = init_db()
@@ -106,7 +100,7 @@ button { background-color: #4CAF50; color: white; border: none; }
 <button type="submit">Login</button>
 </form>
 <p>{{ message }}</p>
-<a href="/home"><button>Back to Home</button></a>
+<a href="/"><button>Back to Home</button></a>
 </div>
 </body>
 </html>
@@ -190,7 +184,8 @@ form { display: inline; }
 
 voter_register_template = '''
 <html>
-<head><title>Voter Registration</title>
+<head>
+<title>Voter Registration</title>
 <style>
 body { background: linear-gradient(to right, #fbc2eb, #a6c1ee); font-family: Arial; }
 .container { width: 300px; margin: auto; margin-top: 50px; background: white; padding: 20px; border-radius: 10px; }
@@ -207,7 +202,7 @@ button { background-color: #2196F3; color: white; border: none; }
 <button type="submit">Register</button>
 </form>
 <p>{{ message }}</p>
-<a href="/home"><button>Back to Home</button></a>
+<a href="/"><button>Back to Home</button></a>
 </div>
 </body>
 </html>
@@ -233,7 +228,7 @@ button { background-color: #FF5722; color: white; border: none; }
 <button type="submit">Apply</button>
 </form>
 <p>{{ message }}</p>
-<a href="/home"><button>Back to Home</button></a>
+<a href="/"><button>Back to Home</button></a>
 </div>
 </body>
 </html>
@@ -266,17 +261,16 @@ button { padding: 5px 10px; border-radius: 5px; border: none; background-color: 
 <button type="submit">Submit Vote</button>
 </form>
 <p>{{ message }}</p>
-<a href="/home"><button>Back to Home</button></a>
+<a href="/"><button>Back to Home</button></a>
 </div>
 </body>
 </html>
 '''
 
 # --- Routes ---
-
 @app.route('/')
-def index_redirect():
-    return redirect('/home')
+def index():
+    return render_template_string(landing_template)
 
 @app.route('/home')
 def home():
@@ -345,7 +339,7 @@ def cancel_candidate(cand_id):
 def logout():
     session.pop('admin', None)
     session.pop('role', None)
-    return redirect('/home')
+    return redirect('/')
 
 # --- Voter Routes ---
 @app.route('/voter_register', methods=['GET', 'POST'])
@@ -370,7 +364,6 @@ def candidate_apply():
         message = "Candidate application submitted. Wait for admin approval."
     return render_template_string(candidate_apply_template, message=message)
 
-# --- Voting ---
 @app.route('/vote/<voter_email>', methods=['GET', 'POST'])
 def vote(voter_email):
     message = ''
