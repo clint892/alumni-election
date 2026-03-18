@@ -19,6 +19,7 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    # Candidates table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,6 +28,8 @@ def init_db():
             approved INTEGER DEFAULT 0
         )
     ''')
+
+    # Voters table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS voters (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,6 +37,8 @@ def init_db():
             approved INTEGER DEFAULT 0
         )
     ''')
+
+    # Settings table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +46,8 @@ def init_db():
             registration INTEGER DEFAULT 1
         )
     ''')
+
+    # Admins table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS admins (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,9 +56,22 @@ def init_db():
         )
     ''')
 
-    # Insert default admins if missing
+    # Votes table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS votes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            voter_email TEXT NOT NULL,
+            candidate_id INTEGER NOT NULL,
+            position TEXT NOT NULL
+        )
+    ''')
+
+    # Default admins
     cursor.execute("INSERT OR IGNORE INTO admins (id, username, password) VALUES (1,'admin1','password1')")
     cursor.execute("INSERT OR IGNORE INTO admins (id, username, password) VALUES (2,'admin2','password2')")
+
+    # Default settings
+    cursor.execute("INSERT OR IGNORE INTO settings (id,voting,registration) VALUES (1,0,1)")
 
     conn.commit()
     conn.close()
@@ -69,6 +89,7 @@ def home():
         <li><a href="/admin/login">Admin Login</a></li>
         <li><a href="/candidate/apply">Candidate Application</a></li>
         <li><a href="/voter/register">Voter Registration</a></li>
+        <li><a href="/vote">Vote Now</a></li>
     </ul>
     '''
 
@@ -89,7 +110,7 @@ def admin_login():
             session['admin']=username
             return redirect(url_for('admin_dashboard'))
         else:
-            return "Invalid credentials"
+            return "Invalid credentials <br><a href='/admin/login'>Try again</a>"
     return '''
     <h1>Admin Login</h1>
     <form method="post">
@@ -151,7 +172,56 @@ def voter_register():
     '''
 
 # --------------------------
-# Admin dashboard & management
+# Voting page
+# --------------------------
+@app.route('/vote', methods=['GET','POST'])
+def vote():
+    conn=get_db_connection()
+    cursor=conn.cursor()
+
+    # Check voting status
+    voting_status = cursor.execute("SELECT voting FROM settings WHERE id=1").fetchone()['voting']
+    if not voting_status:
+        conn.close()
+        return "Voting is currently OFF. <br><a href='/'>Back to Home</a>"
+
+    if request.method=='POST':
+        voter_email = request.form['email']
+        # Check if voter is approved
+        voter = cursor.execute("SELECT approved FROM voters WHERE email=?", (voter_email,)).fetchone()
+        if not voter or voter['approved']==0:
+            conn.close()
+            return "You are not approved to vote. <br><a href='/'>Back to Home</a>"
+
+        # Save votes
+        for key, candidate_id in request.form.items():
+            if key.startswith('position_'):
+                candidate_id = int(candidate_id)
+                position = cursor.execute("SELECT position FROM candidates WHERE id=?", (candidate_id,)).fetchone()['position']
+                # Check if voter already voted for this position
+                exists = cursor.execute("SELECT * FROM votes WHERE voter_email=? AND position=?", (voter_email, position)).fetchone()
+                if not exists:
+                    cursor.execute("INSERT INTO votes (voter_email, candidate_id, position) VALUES (?,?,?)",
+                                   (voter_email, candidate_id, position))
+        conn.commit()
+        conn.close()
+        return "Your votes have been submitted! <br><a href='/'>Back to Home</a>"
+
+    # GET request: show candidates grouped by position
+    positions = cursor.execute("SELECT DISTINCT position FROM candidates WHERE approved=1").fetchall()
+    vote_form = "<h1>Voting Page</h1><form method='post'>Email:<input name='email'><br>"
+    for pos in positions:
+        pos_name = pos['position']
+        vote_form += f"<h3>{pos_name}</h3>"
+        candidates = cursor.execute("SELECT * FROM candidates WHERE approved=1 AND position=?", (pos_name,)).fetchall()
+        for c in candidates:
+            vote_form += f"<input type='radio' name='position_{pos_name}' value='{c['id']}'>{c['name']}<br>"
+    vote_form += "<input type='submit' value='Vote'></form>"
+    conn.close()
+    return vote_form
+
+# --------------------------
+# Admin dashboard
 # --------------------------
 @app.route('/admin')
 def admin_dashboard():
@@ -169,8 +239,14 @@ def admin_dashboard():
     # Settings
     cursor.execute("SELECT voting, registration FROM settings WHERE id=1")
     setting=cursor.fetchone()
-    # Results
-    cursor.execute("SELECT position, COUNT(*) as votes FROM candidates WHERE approved=1 GROUP BY position")
+    # Results (count votes)
+    cursor.execute('''
+        SELECT c.name, c.position, COUNT(v.id) as votes 
+        FROM candidates c
+        LEFT JOIN votes v ON c.id=v.candidate_id
+        WHERE c.approved=1
+        GROUP BY c.id
+    ''')
     results=cursor.fetchall()
     conn.close()
 
@@ -186,9 +262,9 @@ def admin_dashboard():
         voter_html+=f"<li>{v['email']} (Approved:{v['approved']}) {approve_btn}</li>"
     voter_html+="</ul>"
 
-    res_html="<h2>Election Results</h2><ul>"
+    res_html="<h2>Results</h2><ul>"
     for r in results:
-        res_html+=f"<li>{r['position']}: {r['votes']} votes</li>"
+        res_html+=f"<li>{r['position']} - {r['name']}: {r['votes']} votes</li>"
     res_html+="</ul>"
 
     voting_status="ON" if setting['voting'] else "OFF"
