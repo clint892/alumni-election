@@ -1,267 +1,262 @@
-import os
+# app.py
+from flask import Flask, render_template, request, redirect, url_for, session
 import sqlite3
-from flask import Flask, request, redirect, session
+import os
 
 app = Flask(__name__)
-app.secret_key = "secret123"
+app.secret_key = 'supersecretkey'
+DATABASE = 'election.db'
 
-# ---------------- DATABASE ----------------
-conn = sqlite3.connect("election.db", check_same_thread=False)
-cursor = conn.cursor()
+# --------------------------
+# Database helpers
+# --------------------------
+def get_db_connection():
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# Create tables
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS voters (
-    id INTEGER PRIMARY KEY,
-    name TEXT,
-    email TEXT UNIQUE,
-    approved INTEGER DEFAULT 0
-)
-""")
+def init_db():
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS candidates (
-    id INTEGER PRIMARY KEY,
-    name TEXT,
-    position TEXT,
-    approved INTEGER DEFAULT 0
-)
-""")
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS candidates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            position TEXT NOT NULL,
+            approved INTEGER DEFAULT 0
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS voters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            approved INTEGER DEFAULT 0
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            voting INTEGER DEFAULT 0,
+            registration INTEGER DEFAULT 1
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS admins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            password TEXT NOT NULL
+        )
+    ''')
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS votes (
-    email TEXT,
-    candidate TEXT,
-    position TEXT
-)
-""")
+    # Insert default admins if missing
+    cursor.execute("INSERT OR IGNORE INTO admins (id, username, password) VALUES (1,'admin1','password1')")
+    cursor.execute("INSERT OR IGNORE INTO admins (id, username, password) VALUES (2,'admin2','password2')")
 
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS settings (
-    id INTEGER PRIMARY KEY,
-    voting INTEGER DEFAULT 0,
-    registration INTEGER DEFAULT 1
-)
-""")
+    conn.commit()
+    conn.close()
 
-# Ensure settings row exists
-cursor.execute("INSERT OR IGNORE INTO settings (id, voting, registration) VALUES (1,0,1)")
-conn.commit()
+init_db()
 
-# ---------------- HOME ----------------
+# --------------------------
+# Homepage
+# --------------------------
 @app.route('/')
 def home():
     return '''
-    <h1>Election System</h1>
-    <a href="/voter_register">Register Voter</a><br><br>
-    <a href="/candidate_apply">Apply Candidate</a><br><br>
-    <a href="/admin_login">Admin Login</a>
+    <h1>Alumni Election System</h1>
+    <ul>
+        <li><a href="/admin/login">Admin Login</a></li>
+        <li><a href="/candidate/apply">Candidate Application</a></li>
+        <li><a href="/voter/register">Voter Registration</a></li>
+    </ul>
     '''
 
-# ---------------- VOTER REGISTER ----------------
-@app.route('/voter_register', methods=['GET','POST'])
-def voter_register():
-    msg=""
-    if request.method=="POST":
-        try:
-            cursor.execute("INSERT INTO voters (name,email) VALUES (?,?)",
-                           (request.form['name'], request.form['email']))
-            conn.commit()
-            msg="Registered. Wait approval"
-        except:
-            msg="Email exists"
-    return f'''
-    <h2>Voter Register</h2>
-    <form method="POST">
-    <input name="name" placeholder="Name"><br>
-    <input name="email" placeholder="Email"><br>
-    <button>Register</button>
-    </form>{msg}
-    '''
-
-# ---------------- CANDIDATE APPLY (NO EMAIL) ----------------
-@app.route('/candidate_apply', methods=['GET','POST'])
-def candidate_apply():
-    msg=""
-    if request.method=="POST":
-        try:
-            cursor.execute("INSERT INTO candidates (name,position) VALUES (?,?)",
-                           (request.form['name'], request.form['position']))
-            conn.commit()
-            msg="Applied. Wait approval"
-        except:
-            msg="Error"
-    return f'''
-    <h2>Candidate Apply</h2>
-    <form method="POST">
-    <input name="name" placeholder="Name"><br>
-    <input name="position" placeholder="Position"><br>
-    <button>Apply</button>
-    </form>{msg}
-    '''
-
-# ---------------- ADMIN LOGIN ----------------
-@app.route('/admin_login', methods=['GET','POST'])
+# --------------------------
+# Admin login
+# --------------------------
+@app.route('/admin/login', methods=['GET','POST'])
 def admin_login():
-    msg=""
-    if request.method=="POST":
-        u = request.form['username']
-        p = request.form['password']
-
-        if u=="approver" and p=="approver123":
-            session['admin']=u
-            session['role']="approver"
-            return redirect('/dashboard')
-
-        elif u=="viewer" and p=="viewer123":
-            session['admin']=u
-            session['role']="viewer"
-            return redirect('/dashboard')
-
+    if request.method=='POST':
+        username=request.form['username']
+        password=request.form['password']
+        conn=get_db_connection()
+        cursor=conn.cursor()
+        cursor.execute("SELECT * FROM admins WHERE username=? AND password=?",(username,password))
+        admin=cursor.fetchone()
+        conn.close()
+        if admin:
+            session['admin']=username
+            return redirect(url_for('admin_dashboard'))
         else:
-            msg="Invalid credentials"
-
-    return f'''
-    <h2>Admin Login</h2>
-    <form method="POST">
-    <input name="username" placeholder="Username"><br>
-    <input type="password" name="password" placeholder="Password"><br>
-    <button>Login</button>
-    </form>{msg}
+            return "Invalid credentials"
+    return '''
+    <h1>Admin Login</h1>
+    <form method="post">
+        Username:<input name="username"><br>
+        Password:<input type="password" name="password"><br>
+        <input type="submit" value="Login">
+    </form>
+    <br><a href="/">Back to Home</a>
     '''
 
-# ---------------- DASHBOARD ----------------
-@app.route('/dashboard')
-def dashboard():
-    if 'admin' not in session:
-        return redirect('/admin_login')
-
-    # pending approvals
-    voters = cursor.execute("SELECT * FROM voters WHERE approved=0").fetchall()
-    candidates = cursor.execute("SELECT * FROM candidates WHERE approved=0").fetchall()
-
-    # settings
-    voting = cursor.execute("SELECT voting FROM settings WHERE id=1").fetchone()[0]
-    registration = cursor.execute("SELECT registration FROM settings WHERE id=1").fetchone()[0]
-
-    return f'''
-    <h2>Dashboard ({session['role']})</h2>
-
-    <h3>Voting: {'ON' if voting else 'OFF'}</h3>
-    <a href="/toggle_voting">Toggle Voting</a><br><br>
-
-    <h3>Registration: {'ON' if registration else 'OFF'}</h3>
-    <a href="/toggle_registration">Toggle Registration</a><br><br>
-
-    <h3>Approve Voters</h3>
-    {''.join([f"{v[1]} <a href='/approve_voter/{v[0]}'>Approve</a><br>" for v in voters])}
-
-    <h3>Approve Candidates</h3>
-    {''.join([f"{c[1]} ({c[2]}) <a href='/approve_candidate/{c[0]}'>Approve</a><br>" for c in candidates])}
-
-    <br><a href="/results">View Results</a><br>
-    <a href="/logout">Logout</a>
-    '''
-
-# ---------------- APPROVAL ----------------
-@app.route('/approve_voter/<int:id>')
-def approve_voter(id):
-    cursor.execute("UPDATE voters SET approved=1 WHERE id=?", (id,))
-    conn.commit()
-    return redirect('/dashboard')
-
-@app.route('/approve_candidate/<int:id>')
-def approve_candidate(id):
-    cursor.execute("UPDATE candidates SET approved=1 WHERE id=?", (id,))
-    conn.commit()
-    return redirect('/dashboard')
-
-# ---------------- TOGGLE ----------------
-@app.route('/toggle_voting')
-def toggle_voting():
-    v = cursor.execute("SELECT voting FROM settings WHERE id=1").fetchone()[0]
-    new = 1 if v==0 else 0
-    cursor.execute("UPDATE settings SET voting=? WHERE id=1", (new,))
-    conn.commit()
-    return redirect('/dashboard')
-
-@app.route('/toggle_registration')
-def toggle_registration():
-    r = cursor.execute("SELECT registration FROM settings WHERE id=1").fetchone()[0]
-    new = 1 if r==0 else 0
-    cursor.execute("UPDATE settings SET registration=? WHERE id=1", (new,))
-    conn.commit()
-    return redirect('/dashboard')
-
-# ---------------- VOTING ----------------
-@app.route('/vote/<email>', methods=['GET','POST'])
-def vote(email):
-    v = cursor.execute("SELECT approved FROM voters WHERE email=?", (email,)).fetchone()
-    if not v or v[0]==0:
-        return "Not approved"
-
-    voting = cursor.execute("SELECT voting FROM settings WHERE id=1").fetchone()[0]
-    if voting == 0:
-        return "Voting not started"
-
-    data = cursor.execute("SELECT name,position FROM candidates WHERE approved=1").fetchall()
-
-    grouped={}
-    for c in data:
-        grouped.setdefault(c[1], []).append(c[0])
-
-    if request.method=="POST":
-        for pos in grouped:
-            choice=request.form.get(pos)
-            exists = cursor.execute("SELECT * FROM votes WHERE email=? AND position=?",
-                                    (email,pos)).fetchone()
-            if not exists:
-                cursor.execute("INSERT INTO votes VALUES (?,?,?)",
-                               (email,choice,pos))
+# --------------------------
+# Candidate application
+# --------------------------
+@app.route('/candidate/apply', methods=['GET','POST'])
+def candidate_apply():
+    if request.method=='POST':
+        name=request.form['name']
+        position=request.form['position']
+        conn=get_db_connection()
+        cursor=conn.cursor()
+        cursor.execute("INSERT INTO candidates (name, position, approved) VALUES (?,?,0)",(name,position))
         conn.commit()
-        return "Vote submitted"
+        conn.close()
+        return "Application submitted! Await admin approval. <br><a href='/'>Back to Home</a>"
+    return '''
+    <h1>Candidate Application</h1>
+    <form method="post">
+        Name:<input name="name"><br>
+        Position:<input name="position"><br>
+        <input type="submit" value="Apply">
+    </form>
+    <br><a href="/">Back to Home</a>
+    '''
 
-    form=""
-    for pos in grouped:
-        form+=f"<h3>{pos}</h3>"
-        for c in grouped[pos]:
-            form+=f"<input type='radio' name='{pos}' value='{c}'> {c}<br>"
+# --------------------------
+# Voter registration
+# --------------------------
+@app.route('/voter/register', methods=['GET','POST'])
+def voter_register():
+    if request.method=='POST':
+        email=request.form['email']
+        conn=get_db_connection()
+        cursor=conn.cursor()
+        try:
+            cursor.execute("INSERT INTO voters (email, approved) VALUES (?,0)",(email,))
+            conn.commit()
+            message="Registration successful! Await admin approval."
+        except sqlite3.IntegrityError:
+            message="Email already registered."
+        conn.close()
+        return f"{message} <br><a href='/'>Back to Home</a>"
+    return '''
+    <h1>Voter Registration</h1>
+    <form method="post">
+        Email:<input name="email"><br>
+        <input type="submit" value="Register">
+    </form>
+    <br><a href="/">Back to Home</a>
+    '''
 
-    return f"<form method='POST'>{form}<button>Vote</button></form>"
-
-# ---------------- RESULTS ----------------
-@app.route('/results')
-def results():
+# --------------------------
+# Admin dashboard & management
+# --------------------------
+@app.route('/admin')
+def admin_dashboard():
     if 'admin' not in session:
-        return redirect('/admin_login')
+        return redirect(url_for('admin_login'))
+    conn=get_db_connection()
+    cursor=conn.cursor()
 
-    output=""
-    positions = [p[0] for p in cursor.execute("SELECT DISTINCT position FROM candidates WHERE approved=1").fetchall()]
+    # Candidates
+    cursor.execute("SELECT * FROM candidates")
+    candidates=cursor.fetchall()
+    # Voters
+    cursor.execute("SELECT * FROM voters")
+    voters=cursor.fetchall()
+    # Settings
+    cursor.execute("SELECT voting, registration FROM settings WHERE id=1")
+    setting=cursor.fetchone()
+    # Results
+    cursor.execute("SELECT position, COUNT(*) as votes FROM candidates WHERE approved=1 GROUP BY position")
+    results=cursor.fetchall()
+    conn.close()
 
-    for pos in positions:
-        output+=f"<h3>{pos}</h3>"
-        names = cursor.execute("SELECT name FROM candidates WHERE position=?", (pos,)).fetchall()
-        total=0
-        data={}
+    cand_html="<h2>Candidates</h2><ul>"
+    for c in candidates:
+        approve_btn = f"<a href='/admin/approve_candidate/{c['id']}'>Approve</a>" if c['approved']==0 else ""
+        cand_html+=f"<li>{c['name']} - {c['position']} (Approved:{c['approved']}) {approve_btn}</li>"
+    cand_html+="</ul>"
 
-        for n in names:
-            count = cursor.execute("SELECT COUNT(*) FROM votes WHERE candidate=?", (n[0],)).fetchone()[0]
-            data[n[0]]=count
-            total+=count
+    voter_html="<h2>Voters</h2><ul>"
+    for v in voters:
+        approve_btn = f"<a href='/admin/approve_voter/{v['id']}'>Approve</a>" if v['approved']==0 else ""
+        voter_html+=f"<li>{v['email']} (Approved:{v['approved']}) {approve_btn}</li>"
+    voter_html+="</ul>"
 
-        for n,v in data.items():
-            percent = (v/total*100) if total>0 else 0
-            output+=f"{n}: {v} votes ({percent:.1f}%)<br>"
+    res_html="<h2>Election Results</h2><ul>"
+    for r in results:
+        res_html+=f"<li>{r['position']}: {r['votes']} votes</li>"
+    res_html+="</ul>"
 
-    return output
+    voting_status="ON" if setting['voting'] else "OFF"
+    reg_status="ON" if setting['registration'] else "OFF"
 
-# ---------------- LOGOUT ----------------
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect('/')
+    return f"""
+    <h1>Admin Dashboard</h1>
+    <p>Voting:{voting_status} | Registration:{reg_status}</p>
+    {cand_html}
+    {voter_html}
+    {res_html}
+    <br><a href='/admin/toggle_voting'>Toggle Voting</a>
+    <br><a href='/admin/toggle_registration'>Toggle Registration</a>
+    <br><a href='/admin/logout'>Logout</a>
+    """
 
-# ---------------- RUN ----------------
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+# --------------------------
+# Approvals & toggles
+# --------------------------
+@app.route('/admin/approve_candidate/<int:id>')
+def approve_candidate(id):
+    if 'admin' not in session: return redirect(url_for('admin_login'))
+    conn=get_db_connection()
+    conn.execute("UPDATE candidates SET approved=1 WHERE id=?",(id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/approve_voter/<int:id>')
+def approve_voter(id):
+    if 'admin' not in session: return redirect(url_for('admin_login'))
+    conn=get_db_connection()
+    conn.execute("UPDATE voters SET approved=1 WHERE id=?",(id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/toggle_voting')
+def toggle_voting():
+    if 'admin' not in session: return redirect(url_for('admin_login'))
+    conn=get_db_connection()
+    val=conn.execute("SELECT voting FROM settings WHERE id=1").fetchone()['voting']
+    conn.execute("UPDATE settings SET voting=? WHERE id=1",(0 if val else 1,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_dashboard'))
+
+@app.route('/admin/toggle_registration')
+def toggle_registration():
+    if 'admin' not in session: return redirect(url_for('admin_login'))
+    conn=get_db_connection()
+    val=conn.execute("SELECT registration FROM settings WHERE id=1").fetchone()['registration']
+    conn.execute("UPDATE settings SET registration=? WHERE id=1",(0 if val else 1,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('admin_dashboard'))
+
+# --------------------------
+# Admin logout
+# --------------------------
+@app.route('/admin/logout')
+def admin_logout():
+    session.pop('admin', None)
+    return redirect(url_for('home'))
+
+# --------------------------
+# Run app
+# --------------------------
+if __name__=="__main__":
+    port=int(os.environ.get("PORT",5000))
     app.run(host="0.0.0.0", port=port)
