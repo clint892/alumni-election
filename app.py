@@ -9,7 +9,7 @@ app.secret_key = "secret123"
 conn = sqlite3.connect("election.db", check_same_thread=False)
 cursor = conn.cursor()
 
-# Create tables (only if not exists)
+# Create tables
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS voters (
     id INTEGER PRIMARY KEY,
@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS voters (
 
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS candidates (
-    name TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY,
+    name TEXT,
     position TEXT,
     approved INTEGER DEFAULT 0
 )
@@ -35,6 +36,18 @@ CREATE TABLE IF NOT EXISTS votes (
 )
 """)
 
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY,
+    voting INTEGER DEFAULT 0,
+    registration INTEGER DEFAULT 1
+)
+""")
+
+# Ensure settings row exists
+cursor.execute("INSERT OR IGNORE INTO settings (id, voting, registration) VALUES (1,0,1)")
+conn.commit()
+
 # ---------------- HOME ----------------
 @app.route('/')
 def home():
@@ -45,15 +58,14 @@ def home():
     <a href="/admin_login">Admin Login</a>
     '''
 
-# ---------------- VOTER ----------------
+# ---------------- VOTER REGISTER ----------------
 @app.route('/voter_register', methods=['GET','POST'])
 def voter_register():
     msg=""
     if request.method=="POST":
-        name=request.form['name']
-        email=request.form['email']
         try:
-            cursor.execute("INSERT INTO voters (name,email,approved) VALUES (?,?,0)",(name,email))
+            cursor.execute("INSERT INTO voters (name,email) VALUES (?,?)",
+                           (request.form['name'], request.form['email']))
             conn.commit()
             msg="Registered. Wait approval"
         except:
@@ -67,19 +79,18 @@ def voter_register():
     </form>{msg}
     '''
 
-# ---------------- CANDIDATE ----------------
+# ---------------- CANDIDATE APPLY (NO EMAIL) ----------------
 @app.route('/candidate_apply', methods=['GET','POST'])
 def candidate_apply():
     msg=""
     if request.method=="POST":
-        name=request.form['name']
-        position=request.form['position']
         try:
-            cursor.execute("INSERT INTO candidates (name,position,approved) VALUES (?,?,0)",(name,position))
+            cursor.execute("INSERT INTO candidates (name,position) VALUES (?,?)",
+                           (request.form['name'], request.form['position']))
             conn.commit()
-            msg="Wait approval"
+            msg="Applied. Wait approval"
         except:
-            msg="Already applied"
+            msg="Error"
     return f'''
     <h2>Candidate Apply</h2>
     <form method="POST">
@@ -94,28 +105,27 @@ def candidate_apply():
 def admin_login():
     msg=""
     if request.method=="POST":
-        username=request.form['username']
-        password=request.form['password']
+        u = request.form['username']
+        p = request.form['password']
 
-        # Approver admin
-        if username=="approver" and password=="approver123":
-            session['admin']=username
+        if u=="approver" and p=="approver123":
+            session['admin']=u
             session['role']="approver"
             return redirect('/dashboard')
 
-        # Viewer admin
-        if username=="viewer" and password=="viewer123":
-            session['admin']=username
+        elif u=="viewer" and p=="viewer123":
+            session['admin']=u
             session['role']="viewer"
             return redirect('/dashboard')
 
-        msg="Wrong login"
+        else:
+            msg="Invalid credentials"
 
     return f'''
     <h2>Admin Login</h2>
     <form method="POST">
     <input name="username" placeholder="Username"><br>
-    <input name="password" type="password" placeholder="Password"><br>
+    <input type="password" name="password" placeholder="Password"><br>
     <button>Login</button>
     </form>{msg}
     '''
@@ -126,18 +136,13 @@ def dashboard():
     if 'admin' not in session:
         return redirect('/admin_login')
 
-    cursor.execute("SELECT * FROM voters WHERE approved=0")
-    voters=cursor.fetchall()
+    # pending approvals
+    voters = cursor.execute("SELECT * FROM voters WHERE approved=0").fetchall()
+    candidates = cursor.execute("SELECT * FROM candidates WHERE approved=0").fetchall()
 
-    cursor.execute("SELECT * FROM candidates WHERE approved=0")
-    candidates=cursor.fetchall()
-
-    # Read voting and registration status from existing table
-    cursor.execute("SELECT voting FROM settings WHERE id=1")
-    voting = cursor.fetchone()[0]
-
-    cursor.execute("SELECT registration FROM settings WHERE id=1")
-    registration = cursor.fetchone()[0]
+    # settings
+    voting = cursor.execute("SELECT voting FROM settings WHERE id=1").fetchone()[0]
+    registration = cursor.execute("SELECT registration FROM settings WHERE id=1").fetchone()[0]
 
     return f'''
     <h2>Dashboard ({session['role']})</h2>
@@ -152,7 +157,7 @@ def dashboard():
     {''.join([f"{v[1]} <a href='/approve_voter/{v[0]}'>Approve</a><br>" for v in voters])}
 
     <h3>Approve Candidates</h3>
-    {''.join([f"{c[0]} ({c[1]}) <a href='/approve_candidate/{c[0]}'>Approve</a><br>" for c in candidates])}
+    {''.join([f"{c[1]} ({c[2]}) <a href='/approve_candidate/{c[0]}'>Approve</a><br>" for c in candidates])}
 
     <br><a href="/results">View Results</a><br>
     <a href="/logout">Logout</a>
@@ -161,62 +166,58 @@ def dashboard():
 # ---------------- APPROVAL ----------------
 @app.route('/approve_voter/<int:id>')
 def approve_voter(id):
-    cursor.execute("UPDATE voters SET approved=1 WHERE id=?",(id,))
+    cursor.execute("UPDATE voters SET approved=1 WHERE id=?", (id,))
     conn.commit()
     return redirect('/dashboard')
 
-@app.route('/approve_candidate/<name>')
-def approve_candidate(name):
-    cursor.execute("UPDATE candidates SET approved=1 WHERE name=?",(name,))
+@app.route('/approve_candidate/<int:id>')
+def approve_candidate(id):
+    cursor.execute("UPDATE candidates SET approved=1 WHERE id=?", (id,))
     conn.commit()
     return redirect('/dashboard')
 
-# ---------------- TOGGLE VOTING ----------------
+# ---------------- TOGGLE ----------------
 @app.route('/toggle_voting')
 def toggle_voting():
-    cursor.execute("SELECT voting FROM settings WHERE id=1")
-    v = cursor.fetchone()[0]
+    v = cursor.execute("SELECT voting FROM settings WHERE id=1").fetchone()[0]
     new = 1 if v==0 else 0
-    cursor.execute("UPDATE settings SET voting=? WHERE id=1",(new,))
+    cursor.execute("UPDATE settings SET voting=? WHERE id=1", (new,))
     conn.commit()
     return redirect('/dashboard')
 
-# ---------------- TOGGLE REGISTRATION ----------------
 @app.route('/toggle_registration')
 def toggle_registration():
-    cursor.execute("SELECT registration FROM settings WHERE id=1")
-    r = cursor.fetchone()[0]
+    r = cursor.execute("SELECT registration FROM settings WHERE id=1").fetchone()[0]
     new = 1 if r==0 else 0
-    cursor.execute("UPDATE settings SET registration=? WHERE id=1",(new,))
+    cursor.execute("UPDATE settings SET registration=? WHERE id=1", (new,))
     conn.commit()
     return redirect('/dashboard')
 
 # ---------------- VOTING ----------------
 @app.route('/vote/<email>', methods=['GET','POST'])
 def vote(email):
-    cursor.execute("SELECT approved FROM voters WHERE email=?",(email,))
-    v = cursor.fetchone()
+    v = cursor.execute("SELECT approved FROM voters WHERE email=?", (email,)).fetchone()
     if not v or v[0]==0:
         return "Not approved"
 
-    cursor.execute("SELECT voting FROM settings WHERE id=1")
-    if cursor.fetchone()[0]==0:
+    voting = cursor.execute("SELECT voting FROM settings WHERE id=1").fetchone()[0]
+    if voting == 0:
         return "Voting not started"
 
-    cursor.execute("SELECT name,position FROM candidates WHERE approved=1")
-    data=cursor.fetchall()
+    data = cursor.execute("SELECT name,position FROM candidates WHERE approved=1").fetchall()
 
     grouped={}
     for c in data:
-        grouped.setdefault(c[1],[]).append(c[0])
+        grouped.setdefault(c[1], []).append(c[0])
 
     if request.method=="POST":
         for pos in grouped:
             choice=request.form.get(pos)
-            # Only 1 vote per position
-            cursor.execute("SELECT * FROM votes WHERE email=? AND position=?",(email,pos))
-            if not cursor.fetchone():
-                cursor.execute("INSERT INTO votes VALUES (?,?,?)",(email,choice,pos))
+            exists = cursor.execute("SELECT * FROM votes WHERE email=? AND position=?",
+                                    (email,pos)).fetchone()
+            if not exists:
+                cursor.execute("INSERT INTO votes VALUES (?,?,?)",
+                               (email,choice,pos))
         conn.commit()
         return "Vote submitted"
 
@@ -235,23 +236,22 @@ def results():
         return redirect('/admin_login')
 
     output=""
-    cursor.execute("SELECT DISTINCT position FROM candidates WHERE approved=1")
-    positions=[p[0] for p in cursor.fetchall()]
+    positions = [p[0] for p in cursor.execute("SELECT DISTINCT position FROM candidates WHERE approved=1").fetchall()]
 
     for pos in positions:
         output+=f"<h3>{pos}</h3>"
-        cursor.execute("SELECT name FROM candidates WHERE position=? AND approved=1",(pos,))
-        total_votes=0
-        votes_count={}
-        for c in cursor.fetchall():
-            name=c[0]
-            cursor.execute("SELECT COUNT(*) FROM votes WHERE candidate=?",(name,))
-            v=cursor.fetchone()[0]
-            votes_count[name]=v
-            total_votes+=v
-        for name,v in votes_count.items():
-            percent= (v/total_votes*100) if total_votes>0 else 0
-            output+=f"{name}: {v} votes ({percent:.1f}%)<br>"
+        names = cursor.execute("SELECT name FROM candidates WHERE position=?", (pos,)).fetchall()
+        total=0
+        data={}
+
+        for n in names:
+            count = cursor.execute("SELECT COUNT(*) FROM votes WHERE candidate=?", (n[0],)).fetchone()[0]
+            data[n[0]]=count
+            total+=count
+
+        for n,v in data.items():
+            percent = (v/total*100) if total>0 else 0
+            output+=f"{n}: {v} votes ({percent:.1f}%)<br>"
 
     return output
 
